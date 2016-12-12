@@ -1,0 +1,92 @@
+Proxy between AIs and 3D games
+UDP on localhost
+msgpack used for transfer of messages
+
+Setup
+  Proxy is started first and connects to the game server (or starts the game, as appropriate)
+  In theory, multiple AIs can connect to one proxy - this might be useful for monitoring etc
+  Connection between AI and proxy is in the form of messages sent in UDP packets
+    It is assumed that the proxy and the AI are running on the same machine using the loopback interface so no attempt at message
+    redelivery is made - AI should therefore not assume reliability of message transmission
+
+Keep alive
+  AI and proxy both ping each other on a regular interval, shutting down the connection if no response arrives
+
+Perception system
+  Proxy maintains a map of local environment around AI's avatar
+   Map is a spatial map presented as a 3D voxel grid - each voxel represents one of the following basic types:
+     0 - Air or empty space, traversible
+     1 - Obstacle - not traversible or destroyable
+     2 - Obstacle - traversible and easily destroyed
+     3 - Obstacle - traversible after interaction (doors etc)
+     4 - Obstacle - traversible and destroyable with effort
+   A second integer may be used to represent the voxel type - this varies per game
+   AI can request a mapping of strings to voxel types
+  Proxy also maintains a list of objects and other entities present within the local spatial map
+   Each entity is specified as a 3D coordinate, integer type (mapped to strings as with the voxel data) and associated metadata
+  AI sends search queries to proxy:
+   Distance to specified 3D coordinates
+   Distance to specified entity
+   Nearest block of specified type
+   Nearest entity of specified type
+   Count of entities of specified type
+
+Movement
+  AI requests to move to a location in 3D space, proxy handles pathfinding
+     If the location specifies an obstacle voxel, proxy will attempt to place AI's avatar as close as possible
+  If there is a possible path but it is blocked by class 2 or 3 voxels, those voxels will be destroyed or interacted with as appropriate
+  AI can also request to follow a specific entity or (if supported in game) to teleport to an entity or location instantly
+  AI can request to look at a particular 3D coordinate or entity, or in a particular direction in 3D space
+  At any one moment, there is only one target for following, looking or moving to
+
+Interaction and combat
+  AI requests to interact with a particular location in 3D space or a particular entity
+  AI may request to attack a specified entity
+
+Messaging
+  AI can send and receive messages:
+     Local space - "out loud" to other entities in range
+     Direct to entity
+  The AI should NOT use the messaging system for commands and status updates
+
+Commands and status updates
+  The AI should use the messaging system for this (joking)
+  AI is sent any commands issued to it by the user
+     Each command is sent with a unique request ID to enable replies
+     YATE makes a distinction between the admin user and everyone else - by default all commands are "everyone else"
+     After receiving a command, AI can respond with a status update to inform the command's sender of the result or simply do nothing
+  Status updates can be sent from the AI to the proxy for the admin user to review
+  YATE will also cache a small backlog of status updates which can be sent to the AI upon request
+  Status updates consist of strings and a boolean flag indicating whether to echo the status update back to the AI
+    If the status update is in response to a command, the status update should include the request ID
+
+Inventory
+  AI may request contents of inventory
+     If supported by game, "quick" inventory may be queried - this is the immediately available set of items/weapons/etc
+  Each inventory item has an integer type specifying the purpose:
+    0 - No ingame use or can only be sold
+    1 - Weapon
+    2 - Health/healing item - this also includes food where food is used to heal
+    3 - Story/quest item
+    4 - Crafting/building resource
+    5 - Tool used for interaction
+  In addition the inventory lists the amount of each item, the strength of weapons and how effective healing items are etc
+  A second integer specifies the exact type of each item, with string mappings
+  AI may request to use any item in the appropriate way (wielding a weapon, unlocking a door with a key, eating food etc)
+
+Health and other variables
+  AI can request a health status, this will include other relevant variables (for example: hunger in minecraft, or HP+MP in an RPG)
+  The health status will contain a boolean value indicating if the AI's avatar is dead or alive
+
+
+
+
+
+
+
+
+
+
+
+
+
