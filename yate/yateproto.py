@@ -1,10 +1,10 @@
 """ This file contains constants and other stuff useful for dealing with the YATE network protocol
     Please note that this protocol does not take security into consideration AT ALL, everything should run on localhost only
 """
-import eventlet
-eventlet.monkey_patch()
 import msgpack
 import random
+import time
+import hashlib
 
 # params for each message type are shown below
 MSGTYPE_CONNECT       = 0 # ()
@@ -17,6 +17,7 @@ YATE_KEEPALIVE_TIMEOUT = 2 # in seconds
 
 # for performance reasons, the below is used instead of strings for keys in the clients dictionary in yateserver.py
 YATE_LAST_ACKED = 0 # a set of message IDs from incoming ACK packets - we use a set cos UDP can be weird
+YATE_SOCK_ADDR  = 1
 
 def gen_msg_id():
     """ Generate a random-ish message ID integer and return it
@@ -28,6 +29,6 @@ def send_yate_msg(msgtype,params,addr,sock):
     """ Sends a message and returns the message ID
     """
     msgid   = gen_msg_id()
-    msgdata = msgpack.packb((msgtype,params))
-    sock.sendto(msgdata,addr)
+    msgdata = msgpack.packb((msgtype,params,msgid))
+    sock.sendto(msgdata,(addr[0],addr[1]))
     return msgid
