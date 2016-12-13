@@ -2,6 +2,12 @@ Proxy between AIs and 3D games
 UDP on localhost
 msgpack used for transfer of messages
 
+Protocol:
+  msgpack list
+   msgtype field:   integer constant
+   msgparams field: msgpack list or msgpack dictionary
+   msgid field:     random integer used to identify this message so it can be responded to properly
+
 Setup
   Proxy is started first and connects to the game server (or starts the game, as appropriate)
   In theory, multiple AIs can connect to one proxy - this might be useful for monitoring etc
@@ -11,6 +17,8 @@ Setup
 
 Keep alive
   AI and proxy both ping each other on a regular interval, shutting down the connection if no response arrives
+  packet format: list of 0 length
+  ACK is sent with the msg_id in the params
 
 Perception system
   Proxy maintains a map of local environment around AI's avatar
