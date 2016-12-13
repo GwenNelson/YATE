@@ -6,7 +6,7 @@ The system consists of a few parts:
 
  1. The game server: where the game actually runs, YATE doesn't really directly alter anything here at all
  2. YATE proxy: connects to the game server (or theoretically could embed a game engine) and translates+abstracts details to present a uniform interface
- 3. YATE proxy driver: only one at present (minecraft), part of the YATE proxy process
+ 3. YATE proxy driver: handles game-specific tasks for the YATE proxy
  4. YATE console (optional): connects to the YATE proxy and gives an overview of what the state of the game is from the AI's perspective, can also be used as a lightweight client if desired
  5. Your AGI: connects to the YATE proxy using a simple UDP-based protocol and does AGI stuff - I call mine MrRobot and it's in this repo
 
