@@ -75,7 +75,8 @@ class MockDriver(base.YateBaseDriver):
              if new_vox.can_open():
                 self.interact_voxel(new_vox)
           self.spatial_pos = new_vox
-
+   def get_vision_range(self):
+       return self.visual_range
    def get_voxel(self,spatial_pos):
        return self.env[tuple(spatial_pos)]
 

@@ -7,11 +7,19 @@ import yatelog
 from yateproto import *
 
 class YATEClient:
-   def __init__(self,server_addr=None):
-       self.server_addr = server_addr
-       self.connected   = False
-       self.ready       = False
-       self.connect_id  = None
+   """ This class is used to connect to a YATE proxy server
+   """
+
+   def __init__(self,server_addr=None,connect_cb=None,disconnect_cb=None):
+       """ server_addr is a tuple of (ip,port) - this should usually be something on localhost for security reasons
+           connect_cb and disconnect_cb are callback functions that will be invoked upon successful connect/disconnect
+       """
+       self.server_addr   = server_addr
+       self.connected     = False
+       self.ready         = False
+       self.connect_id    = None
+       self.connect_cb    = connect_cb
+       self.disconnect_cb = disconnect_cb
        self.sock        = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
        self.sock.bind(('127.0.0.1',0))
        self.pool = eventlet.GreenPool(100)
@@ -24,6 +32,14 @@ class YATEClient:
 
    def get_port(self):
        return self.sock.getsockname()[1]
+   def refresh_vis(self,spatial_pos=None,entity_id=None):
+       """ Call this to request a refresh of the visual perceptions
+           This will only update what is within visual range of the AI's avatar and it is only a request - the request may not be honoured
+           A decent AGI will be able to use this to build a probablistic model of the environment so the unreliable nature is by design
+           If spatial_pos is a tuple of 3D coordinates, a single voxel will be requested for update
+           If entity_id is an entity UUID string, the relevant entity will be requested for update
+       """
+       pass
    def handle_keepalive(self,msg_params,addr,msg_id):
        send_yate_msg(MSGTYPE_KEEPALIVE_ACK,[msg_id],addr,self.sock)
    def handle_keepalive_ack(self,msg_params,addr,msg_id):
@@ -32,6 +48,7 @@ class YATEClient:
        yatelog.info('YATEClient','Successfully connected to server')
        self.ready = True
        self.pool.spawn_n(self.do_keepalive)
+       if self.connect_cb != None: self.connect_cb()
    def do_keepalive(self):
        last_id = 1
        while self.ready:
@@ -42,6 +59,7 @@ class YATEClient:
              yatelog.info('YATEClient','Timed out server')
              self.ready     = False
              self.connected = False
+             self.disconnect_cb()
    def proc_packets(self):
        while self.connected:
           eventlet.greenthread.sleep(0)
@@ -71,11 +89,15 @@ class YATEClient:
        self.pool.waitall()
        self.sock.shutdown()
    def is_connected(self):
+       """ returns a boolean value indicating whether or not we're connected AND ready to talk to the proxy
+       """
        if self.server_addr == None: return False
        if not self.connected: return False
        if not self.ready: return False
        return True
    def connect_to(self,server_addr):
+       """ if a server address was not passed into __init__, use this to connect
+       """
        yatelog.info('YATEClient','Connecting to server at %s:%s' % server_addr)
        self.server_addr = server_addr
        self.connected = True

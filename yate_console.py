@@ -30,7 +30,7 @@ class YATEConsoleApp:
        self.log_win.scrollok(True)
        self.log_panel = curses.panel.new_panel(self.log_win)
        self.logger    = yatelog.get_curses_logger(self.log_win)
-       self.disp_func = self.default_disp
+       self.disp_func = self.log_display
        self.client    = yateclient.YATEClient()
        self.running = True
        yatelog.info('yate_console','Starting up')
@@ -76,7 +76,7 @@ class YATEConsoleApp:
        curses.curs_set(0)
        self.scr.nodelay(1)
        self.client.connect_to(('127.0.0.1',int(port_str)))
-   def default_disp(self):
+   def log_display(self):
        self.log_panel.top()
        self.log_panel.show()
        self.log_win.box()
