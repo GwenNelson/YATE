@@ -25,28 +25,6 @@ mock_environment = """
 77777777777777777777777777777777
 """
 
-def create_env():
-    """ Create a hashmap of the mock environment and return it along with avatar coordinates and visual range
-        Return format is a tuple (env,avatar_pos,visual_range)
-    """
-    env = {}
-    x = 0
-    y = 0
-    z = 1 # because it's 2D, everything is on a single plane
-    avatar_pos = None
-    for line in mock_environment.split('\n'):
-        if len(line)>1:
-           y += 1
-           x  = 0
-           for c in line:
-               x += 1
-               if c=='A':
-                  avatar_pos = (x,y,z)
-                  b_type = 0
-               else:
-                  b_type = int(str(c))
-               env[(x,y,z)] = base.YateBaseVoxel(spatial_pos=(x,y,z),basic_type=b_type)
-    return (env,avatar_pos,(x,y,1))
 
 class MockDriver(base.YateBaseDriver):
    def __init__(self,username=None,password=None,server=None):
@@ -54,11 +32,27 @@ class MockDriver(base.YateBaseDriver):
        self.username    = username
        self.password    = password
        self.server_addr = server
-       env,avatar_pos,visual_range = create_env()
-       self.env          = env
-       self.spatial_pos  = avatar_pos
-       self.visual_range = visual_range
-   def get_mypos(self):
+       self.setup_env()
+   def setup_env(self):
+       self.env = {}
+       x = 0
+       y = 0
+       z = 0
+       for line in mock_environment.split('\n'):
+           if len(line)>4:
+              x  = 0
+              for c in line:
+                  if c=='A':
+                     self.spatial_pos = (x,y,z)
+                     b_type = 0
+                  else:
+                     b_type = int(c)
+                  self.env[(x,y,z)] = base.YateBaseVoxel(spatial_pos=(x,y,z),basic_type=b_type)
+                  x += 1
+           y += 1
+       self.visual_range = (x,y,2)
+
+   def get_pos(self):
        return self.spatial_pos
    def move_vector(self,vector):
        """ This function squashes the vector into 2D space, scales it so it only moves 1 voxel at a time and
@@ -84,10 +78,10 @@ class MockDriver(base.YateBaseDriver):
        self.mark_changed()
    def get_vision_range(self):
        return self.visual_range
-   def get_voxel(self,spatial_pos):
-       if self.env.has_key(spatial_pos):
-          return self.env[spatial_pos]
+   def get_voxel(self,voxel_pos):
+       if self.env.has_key(tuple(voxel_pos)):
+          return self.env[tuple(voxel_pos)]
        else:
-          return base.YateBaseVoxel(spatial_pos,basic_type=YATE_VOXEL_UNKNOWN) # if outside of the map, the unknown void wherein Azathoth lurks (or something)
+          return base.YateBaseVoxel(spatial_pos=tuple(voxel_pos),basic_type=YATE_VOXEL_UNKNOWN) # if outside of the map, the unknown void wherein Azathoth lurks (or something)
 
 driver = MockDriver()

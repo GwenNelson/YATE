@@ -146,7 +146,7 @@ class YateBaseDriver(object):
            This method should NOT block using time.sleep or similar
        """
        pass
-   def get_mypos(self):
+   def get_pos(self):
        """ This method should return a tuple representing coordinates in 3D space of the AI's avatar
        """
        pass
@@ -170,7 +170,7 @@ class YateBaseDriver(object):
            This method should attempt to destroy and interact as appropriate
        """
        pass
-   def get_voxel(self,spatial_pos):
+   def get_voxel(self,voxel_pos):
        """ This method should return a voxel object describing the specified 3D coordinates. If the AI's avatar can not
            see the coordinates this method should return None
        """

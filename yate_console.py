@@ -29,7 +29,7 @@ voxel_colors = {YATE_VOXEL_EMPTY:              curses.COLOR_BLACK,
                 YATE_VOXEL_DOOR_EASY_DESTROY:  curses.COLOR_YELLOW,
                 YATE_VOXEL_DOOR_HARD_DESTROY:  curses.COLOR_YELLOW,
                 YATE_VOXEL_HARD_OBSTACLE:      curses.COLOR_RED,
-                YATE_VOXEL_UNKNOWN:            curses.COLOR_WHITE}
+                YATE_VOXEL_UNKNOWN:            curses.COLOR_BLACK}
 
 voxel_static      = ' '
 voxel_destroyable = '#'
@@ -54,18 +54,20 @@ class YATEConsoleApp:
        self.running   = False
        self.y,self.x = self.scr.getbegyx()
        self.h,self.w = self.scr.getmaxyx()
+       self.av_pos = (0,0,0)
 
        self.init_log()
        self.init_voxel_display()
+       self.percept_delay = 0
 
        self.disp_func = self.log_display
-       self.client    = yateclient.YATEClient(connect_cb = self.connect_cb, voxel_update_cb=self.voxel_update_cb)
+       self.client    = yateclient.YATEClient(connect_cb = self.connect_cb, voxel_update_cb=self.voxel_update_cb,avatar_pos_cb=self.avatar_pos_cb)
        self.running = True
        yatelog.info('yate_console','Starting up')
        self.draw_scr()
        self.pool = eventlet.GreenPool(100)
-       self.main_ui_loop()
-
+       self.pool.spawn(self.main_ui_loop)
+       while self.running: eventlet.greenthread.sleep(1)
        curses.curs_set(1)
 
    def init_color_pairs(self):
@@ -95,19 +97,32 @@ class YATEConsoleApp:
        av_x,av_y,av_z    = avatar_pos
        vox_x,vox_y,vox_z = vox_pos
 
-       self.voxel_win.addstr(vox_y,vox_x,voxel_chars[voxel.get_basic_type()],curses.color_pair(VOXEL_COLOR_PAIR+voxel.get_basic_type()))
-       self.scr.refresh()
-       self.draw_scr()
+
+       if round(vox_z) != round(av_z): return
+
+       if vox_pos == avatar_pos:
+          vox_char = 'A'
+       else:
+          vox_char = voxel_chars[voxel.get_basic_type()]
+       self.voxel_win.addstr(vox_y+4,vox_x+4,vox_char,curses.color_pair(VOXEL_COLOR_PAIR+voxel.get_basic_type()))
+   def avatar_pos_cb(self,spatial_position):
+       if self.av_pos != (0,0,0):
+          if self.av_pos != spatial_position:
+             self.client.refresh_vis(voxel_pos=self.av_pos)
+          self.av_pos = tuple(spatial_position)
+       av_x,av_y,av_z = spatial_position
+       self.voxel_win.addstr(av_y+4,av_x+4,'A')
+       
    def init_voxel_display(self):
-       self.voxel_win   = curses.newwin(self.h-3,self.w-2,self.y+2,self.x+1)
-       self.voxel_win.move(1,0)
+       self.voxel_win   = curses.newwin(self.h-4,self.w-2,self.y+3,self.x+2)
 
        self.voxel_panel = curses.panel.new_panel(self.voxel_win)
        self.voxel_panel.bottom()
        self.voxel_panel.hide()
-       for x in xrange(self.x+1,self.w-3,1):
-           for y in xrange(self.y+3,self.h-5):
-               self.voxel_win.addstr(y,x,'?',curses.color_pair(VOXEL_COLOR_PAIR+yateproto.YATE_VOXEL_UNKNOWN))
+       for x in xrange(1,self.w-3,1):
+           for y in xrange(1,self.h-4):
+               eventlet.greenthread.sleep(0)
+               self.voxel_win.addstr(y,x,'!',curses.color_pair(VOXEL_COLOR_PAIR+yateproto.YATE_VOXEL_UNKNOWN))
    def main_ui_loop(self):
        while self.running:
           eventlet.greenthread.sleep(0)
@@ -123,25 +138,42 @@ class YATEConsoleApp:
              if self.client.is_connected():
                 if inkey == 'v':
                    self.disp_func = self.voxel_display
-                   self.scr.refresh()
                    self.draw_scr()
-                if inkey == 'l':
-                   self.disp_func = self.log_display
-                   self.scr.refresh()
-                   self.draw_scr()
+             if inkey == 'l':
+                self.disp_func = self.log_display
+                self.draw_scr()
           except Exception,e:
              yatelog.minor_exception('yate_console','')
           try:
              self.draw_scr()
           except Exception,e:
              pass
+   def track_dirty_thread(self):
+       while self.client.is_connected():
+          eventlet.greenthread.sleep(self.percept_delay)
+          if self.client.envmap.is_complete():
+             self.percept_delay = 0.1
+          else:
+             self.percept_delay = 0.0001
+   def redraw_voxel_grid(self):
+       while self.client.is_connected():
+          eventlet.greenthread.sleep(self.percept_delay)
+          for k,v in self.client.get_map().voxels.items():
+              eventlet.greenthread.sleep(0)
+              self.voxel_update_cb(v)
    def perception_thread(self):
        yatelog.info('yate_console','Perception thread running')
+       self.client.mark_dirty()
        while self.client.is_connected():
-          self.client.refresh_vis()
-          eventlet.greenthread.sleep(5)
+          try:
+             self.client.refresh_vis()
+          except:
+             yatelog.minor_exception('yate_console','failed during visual update')
+          eventlet.greenthread.sleep(self.percept_delay)
    def connect_cb(self):
-       self.pool.spawn_n(self.perception_thread)
+       self.pool.spawn(self.perception_thread)
+       self.pool.spawn(self.track_dirty_thread)
+       self.pool.spawn(self.redraw_voxel_grid)
    def connect(self):
        self.scr.nodelay(0)
        self.scr.addstr(self.y+2,self.x+1,' '*(self.w-2),curses.color_pair(TOPSTATUS))

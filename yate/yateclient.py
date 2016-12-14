@@ -33,6 +33,18 @@ class YATEMap:
        self.visual_range_size  = (0,0,0) # the size of the visual range
        self.visual_range_start = (0,0,0) # specifies where the visible range of voxels starts in 3D space
        self.visual_range_end   = (0,0,0) # specifies where the visible range of voxels ends in 3D space
+   def is_complete(self):
+       """ returns a boolean value indicating whether or not the local visual range of voxels is complete
+           this should be used just after connecting in a loop to get a full starting map
+       """
+       for x in xrange(self.visual_range_start[0],self.visual_range_end[0],1):
+           for y in xrange(self.visual_range_start[1],self.visual_range_end[1],1):
+               for z in xrange(self.visual_range_start[2],self.visual_range_end[2],1):
+                   eventlet.greenthread.sleep(0)
+                   if not self.voxels.has_key((x,y,z)):
+                      self.client.send_request_voxel(x,y,z)
+                      return False
+       return True
    def set_visual_range(self,visual_range):
        """ Set the visual range - this assumes that the avatar position is already set
            If the avatar position is not set when this method is called then queries will fail until avatar position is updated to something accurate
@@ -56,20 +68,20 @@ class YATEMap:
        avatar_x,avatar_y,avatar_z = self.avatar_spatial_pos
        start_x = avatar_x - (self.visual_range_size[0]/2)
        start_y = avatar_y - (self.visual_range_size[1]/2)
-       start_z = avatar_z - (self.visual_range_size[2]/2)
+       start_z = avatar_z
        end_x   = start_x  + self.visual_range_size[0]
        end_y   = start_y  + self.visual_range_size[1]
        end_z   = start_z  + self.visual_range_size[2]
        self.visual_range_start = (start_x,start_y,start_z)
        self.visual_range_end   = (end_x,end_y,end_z)
-   def get_voxel(spatial_pos):
+   def get_voxel(self,spatial_pos):
        """ Return the voxel object found at the specified coordinates
            If this is within the visible area and we do not know anything about the specified voxel then the call blocks until we know at least whether or not there's an unknown voxel there on the server side
            If this is outside the visible area and we do not know anything about the specified voxel then the call returns an unknown voxel
        """
        if utils.check_within(spatial_pos,self.visual_range_start,self.visual_range_end):
           if not self.voxels.has_key(spatial_pos):
-             self.client.send_request_voxel(spatial_pos)
+             self.client.send_request_voxel(*spatial_pos)
              while not self.voxels.has_key(spatial_pos):
                 eventlet.greenthread.sleep(0)
        if self.voxels.has_key(spatial_pos): return self.voxels[spatial_pos]
@@ -105,7 +117,7 @@ class YATEClient:
        self.avatar_pos_cb   = avatar_pos_cb
        self.sock        = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
        self.sock.bind(('127.0.0.1',0))
-       self.pool = eventlet.GreenPool(100)
+       self.pool = eventlet.GreenPool(1000)
        self.last_acked = set()
        self.in_q = eventlet.queue.LightQueue()
        self.handlers = {MSGTYPE_CONNECT_ACK:  self.handle_connect_ack,
@@ -129,23 +141,29 @@ class YATEClient:
        """ Return the map used by this client - this should be treated as read only outside of the client class
        """
        return self.envmap
+   def mark_dirty(self):
+       """ Marks the local world model as dirty - this forces a full update
+       """
+       self.last_update = 0
    def mark_updated(self):
        """ Marks the local world model as updated
        """
        self.last_update = time.time()
    def get_port(self):
        return self.sock.getsockname()[1]
-   def refresh_vis(self,spatial_pos=None,entity_id=None):
+   def refresh_vis(self,voxel_pos=None,entity_id=None):
        """ Call this to request a refresh of the visual perceptions
            This will only update what is within visual range of the AI's avatar and it is only a request - the request may not be honoured
            A decent AGI will be able to use this to build a probablistic model of the environment so the unreliable nature is by design
-           If spatial_pos is a tuple of 3D coordinates, a single voxel will be requested for update
+           If voxel_pos is a tuple of 3D coordinates, a single voxel will be requested for update
            If entity_id is an entity UUID string, the relevant entity will be requested for update
            The client keeps track of the last time it received a packet that updates the world model and tells the server of that time
            The server will only send updates if that time has passed unless the client requests a single voxel or entity
        """
-       if spatial_pos != None:
-          return
+       if not self.envmap.is_complete():
+          self.mark_dirty()
+       if voxel_pos != None:
+          self.client.send_request_voxel(voxel_pos)
        if entity_id != None:
           return
        self.send_request_visual(self.last_update)
@@ -156,11 +174,11 @@ class YATEClient:
        new_vox = base.YateBaseVoxel(from_params = msg_params)
        self.envmap.set_voxel(new_vox)
        self.mark_updated()
-       if self.voxel_update_cb != None: self.voxel_update_cb(new_vox)
+       if self.voxel_update_cb != None: self.pool.spawn_n(self.voxel_update_cb,new_vox)
    def handle_avatar_pos(self,msg_params,msg_id):
        self.envmap.set_avatar_pos(msg_params)
        self.mark_updated()
-       if self.avatar_pos_cb != None: self.avatar_pos_cb(tuple(msg_params))
+       if self.avatar_pos_cb != None: self.pool.spawn_n(self.avatar_pos_cb,msg_params)
    def handle_keepalive(self,msg_params,msg_id):
        send_yate_msg(MSGTYPE_KEEPALIVE_ACK,[msg_id],self.server_addr,self.sock)
    def handle_keepalive_ack(self,msg_params,msg_id):
@@ -171,7 +189,7 @@ class YATEClient:
        self.pool.spawn_n(self.do_keepalive)
        if self.connect_cb != None: self.connect_cb()
    def do_keepalive(self):
-       last_id = 1
+       last_id = send_yate_msg(MSGTYPE_KEEPALIVE,[],self.server_addr,self.sock)
        while self.ready:
           self.last_acked.discard(last_id)
           last_id = send_yate_msg(MSGTYPE_KEEPALIVE,[],self.server_addr,self.sock)
@@ -184,8 +202,8 @@ class YATEClient:
    def proc_packets(self):
        while self.connected:
           eventlet.greenthread.sleep(0)
-          data,addr = self.in_q.get(block=True)
           try:
+             data,addr = self.in_q.get_nowait()
              parsed_data = msgpack.unpackb(data)
              msg_type    = parsed_data[0]
              msg_params  = parsed_data[1]
@@ -198,14 +216,17 @@ class YATEClient:
                    self.handlers[msg_type](msg_params,msg_id)
                 else:
                    yatelog.warn('YATEClient','Unhandled message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
-          except Exception,e:
-             yatelog.minor_exception('YATEServer','Error parsing packet from server') 
+          except:
+             pass
    def read_packets(self):
        yatelog.info('YATEClient','Bound local port at %s' % self.get_port())
        while self.connected:
           eventlet.greenthread.sleep(0)
-          data,addr = self.sock.recvfrom(8192)
-          self.in_q.put([data,addr])
+          try:
+             data,addr = self.sock.recvfrom(8192)
+             self.in_q.put_nowait([data,addr])
+          except:
+             pass
    def stop(self):
        """ Stop the client - terminate any threads and close the socket cleanly
        """
