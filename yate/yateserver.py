@@ -14,16 +14,49 @@ class YATEServer:
        self.logger   = yatelog.get_logger()
        self.driver   = driver
        self.sock     = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-       self.pool     = eventlet.GreenPool(100)
+       self.pool     = eventlet.GreenPool(1000)
        self.in_q     = eventlet.queue.LightQueue()
        self.clients  = {}
-       self.handlers = {MSGTYPE_KEEPALIVE:    self.handle_keepalive,
-                        MSGTYPE_CONNECT:      self.handle_connect,
-                        MSGTYPE_KEEPALIVE_ACK:self.handle_keepalive_ack}
+       self.handlers = {MSGTYPE_KEEPALIVE:     self.handle_keepalive,
+                        MSGTYPE_CONNECT:       self.handle_connect,
+                        MSGTYPE_KEEPALIVE_ACK: self.handle_keepalive_ack,
+                        MSGTYPE_REQUEST_VISUAL:self.handle_request_visual}
        self.handlers.update(self.driver.get_msg_handlers())
        self.sock.bind(('127.0.0.1',0))
        self.pool.spawn_n(self.read_packets)
        for x in xrange(10): self.pool.spawn_n(self.proc_packets)
+   def handle_request_visual(self,msg_params,from_addr,msg_id):
+       yatelog.info('YATEServer','Client requesting visual perception update')
+
+       check_time = msg_params[0] # the timestamp given in the packet to compare against
+       if self.driver.changed_since(check_time):
+          yatelog.debug('YATEServer','Sending updates to client due to out of date timestamp %s' % time.ctime(check_time))
+          visual_range = self.driver.get_vision_range()
+          send_yate_msg(MSGTYPE_VISUAL_RANGE,visual_range,from_addr,self.sock)
+
+          avatar_pos   = self.driver.get_mypos()
+          send_yate_msg(MSGTYPE_AVATAR_POS,avatar_pos,from_addr,self.sock)
+       
+          # calculate where the visible voxels begin and end
+          start_x = avatar_pos[0]-(visual_range[0]/2)
+          start_y = avatar_pos[1]-(visual_range[1]/2)
+          start_z = avatar_pos[2]-(visual_range[2]/2)
+          end_x   = start_x + visual_range[0]
+          end_y   = start_y + visual_range[1]
+          end_z   = start_z + visual_range[2]
+       
+          # send some voxel updates
+          for x in xrange(start_x,end_x,1):
+              for y in xrange(start_y,end_y,1):
+                  for z in xrange(start_z,end_z,1):
+                      voxel_pos  = (x,y,z)
+                      eventlet.greenthread.sleep(0)
+                      self.send_voxel_update(voxel_pos,from_addr)
+
+   def send_voxel_update(self,voxel_pos,client_addr):
+       yatelog.debug('YATEServer','Updating voxel at %s' % str(voxel_pos))
+       voxel_data = self.driver.get_voxel(voxel_pos)
+       send_yate_msg(MSGTYPE_VOXEL_UPDATE,voxel_data.as_msgparams(),client_addr,self.sock)
    def handle_connect(self,msg_params,from_addr,msg_id):
        self.clients[str(from_addr)] = {YATE_LAST_ACKED:set()}
 

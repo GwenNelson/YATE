@@ -4,7 +4,10 @@
     The map is surrounded by a void of unknown voxels
     Turning this thing into a raycaster maze that runs on its own would not be too difficult
 """
-import base
+import base # always import this cos it allows us to do the below imports
+
+import yatelog
+from yateproto import *
 
 mock_environment = """
 77777777777777777777777777777777
@@ -32,19 +35,22 @@ def create_env():
     z = 0 # because it's 2D, everything is on a single plane
     avatar_pos = None
     for line in mock_environment.split('\n'):
-        x += 1
-        for c in line:
-            y += 1
-            if c=='A':
-               avatar_pos = (x,y,z)
-               b_type = 0
-            else:
-               b_type = int(str(c))
-            env[(x,y,z)] = base.YateBaseVoxel(spatial_pos=(x,y,z),basic_type=b_type)
+        if len(line)>1:
+           y += 1
+           x  = 0
+           for c in line:
+               x += 1
+               if c=='A':
+                  avatar_pos = (x,y,z)
+                  b_type = 0
+               else:
+                  b_type = int(str(c))
+               env[(x,y,z)] = base.YateBaseVoxel(spatial_pos=(x,y,z),basic_type=b_type)
     return (env,avatar_pos,(x,y,1))
 
 class MockDriver(base.YateBaseDriver):
    def __init__(self,username=None,password=None,server=None):
+       super(MockDriver,self).__init__(username=username,password=password,server=server)
        self.username    = username
        self.password    = password
        self.server_addr = server
@@ -75,9 +81,13 @@ class MockDriver(base.YateBaseDriver):
              if new_vox.can_open():
                 self.interact_voxel(new_vox)
           self.spatial_pos = new_vox
+       self.mark_changed()
    def get_vision_range(self):
        return self.visual_range
    def get_voxel(self,spatial_pos):
-       return self.env[tuple(spatial_pos)]
+       if self.env.has_key(tuple(spatial_pos)):
+          return self.env[tuple(spatial_pos)]
+       else:
+          return base.YateBaseVoxel(spatial_pos,basic_type=YATE_VOXEL_UNKNOWN) # if outside of the map, the unknown void wherein Azathoth lurks (or something)
 
 driver = MockDriver()

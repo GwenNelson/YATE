@@ -5,24 +5,44 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.par
 import yatelog
 from yateproto import *
 
+import time
+
 class YateBaseVoxel:
    """ This class may either be used directly or inherited from and extended for game-specific mechanics etc
        Instances of this class should be replaced completely, not edited, when the environment changes
        Basically, this class should always be read only
    """
-   def __init__(self,spatial_pos=(64,64,64),basic_type=YATE_VOXEL_EMPTY,specific_type=0,active_state=YATE_VOXEL_INACTIVE,intact_state=YATE_VOXEL_INTACT):
+   def __init__(self,spatial_pos=(64,64,64),basic_type=YATE_VOXEL_EMPTY,specific_type=0,active_state=YATE_VOXEL_INACTIVE,intact_state=YATE_VOXEL_INTACT,from_params=None):
        """ spatial_pos   is obvious
            basic_type    is the basic voxel type as defined in yateproto.py
            specific_type is optional and specifies the game-specific extended type
            active_state and intact_state only make sense in certain contexts:
                doors are active when open, other stuff may be active or not if it makes sense
                partly destroyed voxels are not intact
+           from_params   is a tuple of params from a MSGTYPE_VOXEL_UPDATE message and defaults to None
+                         if specified, from_params overrides other params
        """
-       self.spatial_pos   = spatial_pos
-       self.basic_type    = basic_type
-       self.specific_type = specific_type
-       self.active_state  = active_state
-       self.intact_state  = intact_state
+       if from_params is None:
+          self.spatial_pos   = tuple(spatial_pos)
+          self.basic_type    = basic_type
+          self.specific_type = specific_type
+          self.active_state  = active_state
+          self.intact_state  = intact_state
+       else:
+          self.spatial_pos   = tuple(from_params[0])
+          self.basic_type    = from_params[1]
+          self.specific_type = from_params[2]
+          self.active_state  = from_params[3]
+          self.intact_state  = from_params[4]
+       
+   def get_pos(self):
+       """ return a tuple representing the 3D spatial coordinates of this voxel
+       """
+       return self.spatial_pos
+   def as_msgparams(self):
+       """ return a tuple representing this voxel as message params for MSGTYPE_VOXEL_UPDATE
+       """
+       return (self.spatial_pos,self.basic_type,self.specific_type,self.active_state,self.intact_state)
    def is_intact(self):
        """" return a boolean value indicating whether or not this voxel is fully intact
             if it's partly destroyed, this will return false
@@ -81,7 +101,7 @@ class YateBaseVoxel:
                YATE_VOXEL_HARD_OBSTACLE:     False,
                YATE_VOXEL_UNKNOWN:           False}[self.basic_type]
  
-class YateBaseDriver:
+class YateBaseDriver(object):
    """ This class is the base used for all drivers
        At time of writing the only supported game in YATE is minecraft, so that is the only class inheriting from this one
    """
@@ -90,9 +110,19 @@ class YateBaseDriver:
            by the AI's avatar - the username,password and server params are self explanatory and may optionally be ignored
            if doing so is appropriate. If the setup fails, then the constructor should throw an exception
        """
-       pass
+       self.last_change = time.time()
+   def changed_since(self,timestamp):
+       """ Returns a boolean value indicating whether or not the world has changed since the specified timestamp
+       """
+       if self.last_change >= timestamp: return True
+       return False
+   def mark_changed(self):
+       """ Marks the world as changed, this means that the last changed timestamp will be set to the current time
+       """
+       self.last_change = time.time()
    def get_vision_range(self):
        """ Returns an (x,y,z) tuple representing how many voxels can be perceived by the in-game avatar
+           This must always be an even number on each axis, even if that means losing data
            z is height
        """
        pass

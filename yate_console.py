@@ -65,7 +65,7 @@ class YATEConsoleApp:
    def perception_thread(self):
        yatelog.info('yate_console','Perception thread running')
        while self.client.is_connected():
-          self.client.send_request_visual()
+          self.client.refresh_vis()
           eventlet.greenthread.sleep(5)
    def connect_cb(self):
        self.pool.spawn_n(self.perception_thread)
