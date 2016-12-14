@@ -52,6 +52,7 @@ def info(component,message):
     logger.info('%s: %s',cmp_s,message)
 
 def debug(component,message):
+    if loglevel < logging.DEBUG: return
     cmp_s = '%12s' % component
     logger.debug('%s: %s',cmp_s,message)
 
