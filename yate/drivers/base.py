@@ -1,12 +1,15 @@
-from .. import yatelog
-from .. import yateproto
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+
+import yatelog
 from yateproto import *
 
 class YateBaseVoxel:
-""" This class may either be used directly or inherited from and extended for game-specific mechanics etc
-    Instances of this class should be replaced completely, not edited, when the environment changes
-    Basically, this class should always be read only
-"""
+   """ This class may either be used directly or inherited from and extended for game-specific mechanics etc
+       Instances of this class should be replaced completely, not edited, when the environment changes
+       Basically, this class should always be read only
+   """
    def __init__(self,spatial_pos=(64,64,64),basic_type=YATE_VOXEL_EMPTY,specific_type=0,active_state=YATE_VOXEL_INACTIVE,intact_state=YATE_VOXEL_INTACT):
        """ spatial_pos   is obvious
            basic_type    is the basic voxel type as defined in yateproto.py
@@ -79,9 +82,9 @@ class YateBaseVoxel:
                YATE_VOXEL_UNKNOWN:           False}[self.basic_type]
  
 class YateBaseDriver:
-""" This class is the base used for all drivers
-    At time of writing the only supported game in YATE is minecraft, so that is the only class inheriting from this one
-"""
+   """ This class is the base used for all drivers
+       At time of writing the only supported game in YATE is minecraft, so that is the only class inheriting from this one
+   """
    def __init__(self,username=None,password=None,server=None):
        """ When overriding, the constructor should setup the connection and get into a state where the game is playable
            by the AI's avatar - the username,password and server params are self explanatory and may optionally be ignored

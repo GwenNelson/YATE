@@ -31,10 +31,11 @@ class YATEConsoleApp:
        self.log_panel = curses.panel.new_panel(self.log_win)
        self.logger    = yatelog.get_curses_logger(self.log_win)
        self.disp_func = self.log_display
-       self.client    = yateclient.YATEClient()
+       self.client    = yateclient.YATEClient(connect_cb = self.connect_cb)
        self.running = True
        yatelog.info('yate_console','Starting up')
        self.draw_scr()
+       self.pool = eventlet.GreenPool(100)
        self.main_ui_loop()
 
        curses.curs_set(1)
@@ -54,12 +55,20 @@ class YATEConsoleApp:
              pass
           try:
              if inkey == 'c': self.connect()
+             if inkey == 'q': self.running = False
           except Exception,e:
              yatelog.minor_exception('yate_console','')
           try:
              self.draw_scr()
           except Exception,e:
              pass
+   def perception_thread(self):
+       yatelog.info('yate_console','Perception thread running')
+       while self.client.is_connected():
+          self.client.send_request_visual()
+          eventlet.greenthread.sleep(5)
+   def connect_cb(self):
+       self.pool.spawn_n(self.perception_thread)
    def connect(self):
        self.scr.nodelay(0)
        self.scr.addstr(self.y+2,self.x+1,' '*(self.w-2),curses.color_pair(TOPSTATUS))
@@ -87,10 +96,10 @@ class YATEConsoleApp:
        self.scr.addstr(self.y+1,self.x+2,'Connection status: ',curses.color_pair(TOPSTATUS))
        if self.client.is_connected():
           self.scr.addstr(self.y+1,self.x+21,'Online ',curses.color_pair(TOPSTATUS_ONLINE)|curses.A_BOLD)
-          self.scr.addstr(self.y+2,self.x+2,'Press D to disconnect',curses.color_pair(TOPSTATUS))
+          self.scr.addstr(self.y+2,self.x+2,'[Q quit] [V voxel view] [L log view] [H health view] [I inventory view] [/ enter command]',curses.color_pair(TOPSTATUS))
        else:
           self.scr.addstr(self.y+1,self.x+21,'Offline',curses.color_pair(TOPSTATUS_OFFLINE)|curses.A_BOLD)
-          self.scr.addstr(self.y+2,self.x+2,'Press C to connect',curses.color_pair(TOPSTATUS))
+          self.scr.addstr(self.y+2,self.x+2,'Press C to connect and Q to quit',curses.color_pair(TOPSTATUS))
    def draw_scr(self):
        self.scr.border()
        self.draw_status()

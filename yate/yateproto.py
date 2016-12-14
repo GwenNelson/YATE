@@ -5,6 +5,8 @@ import msgpack
 import random
 import time
 import hashlib
+import sys
+import yatelog
 
 # basic voxel types - "easy to destroy" means YATE can do it automatically, "with effort" means the AI must send the command
 YATE_VOXEL_EMPTY             = 0 # air or empty space
@@ -76,4 +78,12 @@ def send_yate_msg(msgtype,params,addr,sock):
     msgid   = gen_msg_id()
     msgdata = msgpack.packb((msgtype,params,msgid))
     sock.sendto(msgdata,(addr[0],addr[1]))
+    yatelog.debug('yateproto.py','Sent message %s to %s:%s' % (str([msgtype_str[msgtype],params,msgid]),addr[0],addr[1]))
     return msgid
+
+
+# only in python can you do black magic like this
+msgtype_str = {}
+for item in dir(sys.modules[__name__]):
+    if item.startswith('MSGTYPE_'):
+       msgtype_str[getattr(sys.modules[__name__],item)] = item

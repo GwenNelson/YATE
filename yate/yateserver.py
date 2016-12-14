@@ -58,7 +58,6 @@ class YATEServer:
             msg_type    = parsed_data[0]
             msg_params  = parsed_data[1]
             msg_id      = parsed_data[2]
-            yatelog.info('YATEServer','Got message %s from %s' % (msg_type,addr))
             if not self.clients.has_key(str(addr)):
                if msg_type != MSGTYPE_CONNECT:
                   send_yate_msg(MSGTYPE_UNKNOWN_PEER,[],addr,self.sock)
@@ -66,9 +65,10 @@ class YATEServer:
                   self.handle_connect(msg_params,addr,msg_id)
             else:
                if self.handlers.has_key(msg_type):
+                  yatelog.debug('YATEClient','Message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
                   self.handlers[msg_type](msg_params,addr,msg_id)
                else:
-                  yatelog.info('YATEServer','Unhandled message: %s' % str(msg_type,msg_params,msg_id))
+                  yatelog.warn('YATEClient','Unhandled message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
          except Exception,e:
             yatelog.minor_exception('YATEServer','Error parsing packet from %s:%s' % addr)
    def read_packets(self):
@@ -79,24 +79,4 @@ class YATEServer:
          data,addr = self.sock.recvfrom(8192)
          self.in_q.put([data,addr])
 
-if __name__=='__main__':
-   logger = yatelog.get_logger()
-   if len(sys.argv)==1:
-      print 'Usage: yateserver [driver] [gameserver] [username] [password]'
-      print '        <driver>      path to the driver module to use for this session'
-      print '        [gameserver]  IP endpoint for the gameserver to connect to, passed to the driver - optional'
-      print '        [username]    username to pass to the driver - optional'
-      print '        [password]    password to pass to the driver - optional'
-   elif len(sys.argv)>=2:
-      logger.info('YATEServer: Trying to load driver: %s',sys.argv[1])
-      try:
-         drivermod = imp.load_source('yatedriver',sys.argv[1])
-      except Exception,e:
-         yatelog.fatal_exception('YATEServer','Could not load driver')
-      logger.info('YATEServer: Loaded driver, starting server')
-      try:
-         server = YATEServer(drivermod.driver)
-      except Exception,e:
-         yatelog.fatal_exception('YATEServer','Could not start server')
-      logger.info('YATEServer: Server running on port %s', server.get_port())
-      while True: eventlet.greenthread.sleep(0)
+

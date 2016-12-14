@@ -5,6 +5,7 @@ import curses
 
 logger      = None
 formatter   = None
+loglevel    = logging.DEBUG
 
 class CursesHandler(logging.StreamHandler):
    def __init__(self,curses_win=None):
@@ -27,7 +28,7 @@ def get_curses_logger(curses_win):
     global logger
     if logger is None:
        logger = logging.getLogger('YATE')
-       logger.setLevel(logging.INFO)
+       logger.setLevel(loglevel)
        log_handler = CursesHandler(curses_win)
        log_handler.setFormatter(get_formatter())
        logger.curses_win = curses_win
@@ -38,7 +39,7 @@ def get_logger():
     global logger
     if logger is None:
        logger = logging.getLogger('YATE')
-       logger.setLevel(logging.INFO)
+       logger.setLevel(loglevel)
        log_handler = logging.StreamHandler()
        log_handler.setFormatter(get_formatter())
        logger.addHandler(log_handler)
@@ -47,7 +48,16 @@ def get_logger():
 def info(component,message):
     """ Log general info stuff
     """
-    logger.info('%s: %s',component,message)
+    cmp_s = '%12s' % component
+    logger.info('%s: %s',cmp_s,message)
+
+def debug(component,message):
+    cmp_s = '%12s' % component
+    logger.debug('%s: %s',cmp_s,message)
+
+def warn(component,message):
+    cmp_s = '%12s' % component
+    logger.warn('%s: %s',cmp_s,message)
 
 def minor_exception(component,message):
     """ Log an exception, but keep running

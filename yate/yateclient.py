@@ -4,7 +4,17 @@ eventlet.monkey_patch()
 import socket
 import yatelog
 
+import yateproto
 from yateproto import *
+
+class YATEMethod:
+   """ Wrapper used to dynamically call methods that transmit a message, for the win
+   """
+   def __init__(self,client,msgtype):
+       self.msgtype = msgtype
+       self.client  = client
+   def __call__(self,*params):
+       return send_yate_msg(self.msgtype,params,self.client.server_addr,self.client.sock)
 
 class YATEClient:
    """ This class is used to connect to a YATE proxy server
@@ -30,6 +40,13 @@ class YATEClient:
                         MSGTYPE_KEEPALIVE_ACK:self.handle_keepalive_ack}
        if self.server_addr != None: self.connect_to(self.server_addr)
 
+   def __getattr__(self,name):
+       """ This is used to implement message stuff in a hackish way
+       """
+       if name.startswith('send_'):
+          msgtype_name = 'MSGTYPE_%s' % (name[5:].upper())
+          if hasattr(yateproto,msgtype_name):
+             return YATEMethod(self,getattr(yateproto,msgtype_name))
    def get_port(self):
        return self.sock.getsockname()[1]
    def refresh_vis(self,spatial_pos=None,entity_id=None):
@@ -59,7 +76,7 @@ class YATEClient:
              yatelog.info('YATEClient','Timed out server')
              self.ready     = False
              self.connected = False
-             self.disconnect_cb()
+             if self.disconnect_cb != None: self.disconnect_cb()
    def proc_packets(self):
        while self.connected:
           eventlet.greenthread.sleep(0)
@@ -69,7 +86,7 @@ class YATEClient:
              msg_type    = parsed_data[0]
              msg_params  = parsed_data[1]
              msg_id      = parsed_data[2]
-             yatelog.info('YATEClient','Got message %s from %s' % (msg_type,addr))
+             yatelog.debug('YATEClient','Got message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
              if addr != self.server_addr:
                 send_yate_msg(MSGTYPE_UNKNOWN_PEER,[],addr,self.sock)
              elif self.handlers.has_key(msg_type):
