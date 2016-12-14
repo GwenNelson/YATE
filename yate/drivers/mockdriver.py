@@ -58,7 +58,7 @@ class MockDriver(base.YateBaseDriver):
        """ This function squashes the vector into 2D space, scales it so it only moves 1 voxel at a time and
            finally moves in the relevant direction if possible
        """
-       cur_x,cur_y,cur_z = self.get_mypos()
+       cur_x,cur_y,cur_z = self.get_pos()
        vec_x,vec_y,vec_z = int(vector[0]),int(vector[1]),int(vector[2])
        if vec_x > 0: vec_x = 1
        if vec_y > 0: vec_y = 1
@@ -74,7 +74,7 @@ class MockDriver(base.YateBaseDriver):
           else:
              if new_vox.can_open():
                 self.interact_voxel(new_vox)
-          self.spatial_pos = new_vox
+          self.spatial_pos = (new_x,new_y,new_z)
        self.mark_changed()
    def get_vision_range(self):
        return self.visual_range

@@ -112,6 +112,7 @@ class YATEConsoleApp:
           self.av_pos = tuple(spatial_position)
        av_x,av_y,av_z = spatial_position
        self.voxel_win.addstr(av_y+4,av_x+4,'A')
+       self.av_pos = spatial_position
        
    def init_voxel_display(self):
        self.voxel_win   = curses.newwin(self.h-4,self.w-2,self.y+3,self.x+2)
@@ -123,6 +124,15 @@ class YATEConsoleApp:
            for y in xrange(1,self.h-4):
                eventlet.greenthread.sleep(0)
                self.voxel_win.addstr(y,x,'!',curses.color_pair(VOXEL_COLOR_PAIR+yateproto.YATE_VOXEL_UNKNOWN))
+
+   def do_move(self,key):
+       # for now this is quite silly and only works with the mock driver
+       if key=='w': vector = ( 0,-1,0)
+       if key=='a': vector = ( 0, 1,0)
+       if key=='s': vector = (-1, 0,0)
+       if key=='d': vector = ( 1, 0,0)
+       self.client.move_vector(vector)
+
    def main_ui_loop(self):
        while self.running:
           eventlet.greenthread.sleep(0)
@@ -139,6 +149,9 @@ class YATEConsoleApp:
                 if inkey == 'v':
                    self.disp_func = self.voxel_display
                    self.draw_scr()
+                if not (inkey is None):
+                   if inkey in 'wasd':
+                      self.do_move(inkey)
              if inkey == 'l':
                 self.disp_func = self.log_display
                 self.draw_scr()
@@ -152,15 +165,9 @@ class YATEConsoleApp:
        while self.client.is_connected():
           eventlet.greenthread.sleep(self.percept_delay)
           if self.client.envmap.is_complete():
-             self.percept_delay = 0.1
+             self.percept_delay = 1.5
           else:
-             self.percept_delay = 0.0001
-   def redraw_voxel_grid(self):
-       while self.client.is_connected():
-          eventlet.greenthread.sleep(self.percept_delay)
-          for k,v in self.client.get_map().voxels.items():
-              eventlet.greenthread.sleep(0)
-              self.voxel_update_cb(v)
+             self.percept_delay = 0
    def perception_thread(self):
        yatelog.info('yate_console','Perception thread running')
        self.client.mark_dirty()
@@ -171,9 +178,8 @@ class YATEConsoleApp:
              yatelog.minor_exception('yate_console','failed during visual update')
           eventlet.greenthread.sleep(self.percept_delay)
    def connect_cb(self):
-       self.pool.spawn(self.perception_thread)
        self.pool.spawn(self.track_dirty_thread)
-       self.pool.spawn(self.redraw_voxel_grid)
+       self.pool.spawn(self.perception_thread)
    def connect(self):
        self.scr.nodelay(0)
        self.scr.addstr(self.y+2,self.x+1,' '*(self.w-2),curses.color_pair(TOPSTATUS))
@@ -207,7 +213,7 @@ class YATEConsoleApp:
        self.scr.addstr(self.y+1,self.x+2,'Connection status: ',curses.color_pair(TOPSTATUS))
        if self.client.is_connected():
           self.scr.addstr(self.y+1,self.x+21,'Online ',curses.color_pair(TOPSTATUS_ONLINE)|curses.A_BOLD)
-          self.scr.addstr(self.y+2,self.x+2,'[Q quit] [V voxel view] [L log view] [H health view] [I inventory view] [/ enter command]',curses.color_pair(TOPSTATUS))
+          self.scr.addstr(self.y+2,self.x+2,'[Q quit] [V voxel view] [L log view] [H health view] [I inventory view] [/ enter command] [wasd manual move]',curses.color_pair(TOPSTATUS))
        else:
           self.scr.addstr(self.y+1,self.x+21,'Offline',curses.color_pair(TOPSTATUS_OFFLINE)|curses.A_BOLD)
           self.scr.addstr(self.y+2,self.x+2,'Press C to connect and Q to quit',curses.color_pair(TOPSTATUS))

@@ -81,7 +81,7 @@ class YATEMap:
        """
        if utils.check_within(spatial_pos,self.visual_range_start,self.visual_range_end):
           if not self.voxels.has_key(spatial_pos):
-             self.client.send_request_voxel(*spatial_pos)
+             self.send_request_voxel(*spatial_pos)
              while not self.voxels.has_key(spatial_pos):
                 eventlet.greenthread.sleep(0)
        if self.voxels.has_key(spatial_pos): return self.voxels[spatial_pos]
@@ -137,6 +137,10 @@ class YATEClient:
           msgtype_name = 'MSGTYPE_%s' % (name[5:].upper())
           if hasattr(yateproto,msgtype_name):
              return YATEMethod(self,getattr(yateproto,msgtype_name))
+   def move_vector(self,v):
+       """ Send a request to move in the specified vector if possible
+       """
+       self.send_move_vector(*v)
    def get_map(self):
        """ Return the map used by this client - this should be treated as read only outside of the client class
        """
@@ -160,12 +164,13 @@ class YATEClient:
            The client keeps track of the last time it received a packet that updates the world model and tells the server of that time
            The server will only send updates if that time has passed unless the client requests a single voxel or entity
        """
-       if not self.envmap.is_complete():
-          self.mark_dirty()
        if voxel_pos != None:
-          self.client.send_request_voxel(voxel_pos)
+          self.send_request_voxel(voxel_pos)
+          return
        if entity_id != None:
           return
+       if not self.envmap.is_complete():
+          self.mark_dirty()
        self.send_request_visual(self.last_update)
    def handle_visual_range(self,msg_params,msg_id):
        self.envmap.set_visual_range(msg_params)
@@ -247,6 +252,6 @@ class YATEClient:
        self.server_addr = server_addr
        self.connected = True
        self.pool.spawn_n(self.read_packets)
-       for x in xrange(10): self.pool.spawn_n(self.proc_packets)
+       for x in xrange(10): self.pool.spawn(self.proc_packets)
        self.connect_id  = send_yate_msg(MSGTYPE_CONNECT,(),server_addr,self.sock)
 

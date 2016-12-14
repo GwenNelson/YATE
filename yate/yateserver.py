@@ -21,11 +21,15 @@ class YATEServer:
                         MSGTYPE_CONNECT:       self.handle_connect,
                         MSGTYPE_KEEPALIVE_ACK: self.handle_keepalive_ack,
                         MSGTYPE_REQUEST_VISUAL:self.handle_request_visual,
-                        MSGTYPE_REQUEST_VOXEL: self.handle_request_voxel}
+                        MSGTYPE_REQUEST_VOXEL: self.handle_request_voxel,
+                        MSGTYPE_MOVE_VECTOR:   self.handle_move_vector}
        self.handlers.update(self.driver.get_msg_handlers())
        self.sock.bind(('127.0.0.1',0))
        self.pool.spawn_n(self.read_packets)
        for x in xrange(100): self.pool.spawn_n(self.proc_packets)
+   def handle_move_vector(self,msg_params,from_addr,msg_id):
+       self.driver.move_vector(tuple(msg_params))
+       send_yate_msg(MSGTYPE_AVATAR_POS,self.driver.get_pos(),from_addr,self.sock)
    def handle_request_voxel(self,msg_params,from_addr,msg_id):
        self.send_voxel_update(msg_params,from_addr)
    def handle_request_visual(self,msg_params,from_addr,msg_id):
@@ -53,8 +57,8 @@ class YATEServer:
           for x in xrange(start_x-1,end_x,1):
               for y in xrange(start_y-1,end_y,1):
                   for z in xrange(start_z,end_z,1):
-                      eventlet.greenthread.sleep(0)
                       voxel_pos  = (x,y,z)
+                      eventlet.greenthread.sleep(0)
                       self.send_voxel_update(voxel_pos,from_addr)
 
    def send_voxel_update(self,voxel_pos,client_addr):
@@ -102,8 +106,11 @@ class YATEServer:
                   self.handle_connect(msg_params,addr,msg_id)
             else:
                if self.handlers.has_key(msg_type):
-                  yatelog.debug('YATEClient','Message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
-                  self.handlers[msg_type](msg_params,addr,msg_id)
+                  yatelog.debug('YATEServer','Message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
+                  try:
+                     self.handlers[msg_type](msg_params,addr,msg_id)
+                  except:
+                     yatelog.minor_exception('YATEServer','Error during message handling')
                else:
                   yatelog.warn('YATEClient','Unhandled message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
          except:

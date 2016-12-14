@@ -82,7 +82,7 @@ class YateBaseVoxel:
            if the voxel basic type is unknown, we assume it can NOT be traversed until proven otherwise
            this method will also throw an exception if self.basic_type is not a proper basic type
        """
-       if self.isopen: return True # this only makes sense for doors - if we are not a door, isopen should always be False
+       if self.is_open(): return True # this only makes sense for doors - if we are not a door, isopen should always be False
        return {YATE_VOXEL_EMPTY:             True,
                YATE_VOXEL_TOTAL_OBSTACLE:    False,
                YATE_VOXEL_EASY_OBSTACLE:     not no_destroy,
