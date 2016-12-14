@@ -39,6 +39,12 @@ class YATEMap:
        """
        self.visual_range_size = visual_range
        self.recalculate_visual()
+   def get_avatar_pos(self):
+       """ return the avatar position in 3D space, blocks if (0,0,0)
+       """
+       while self.avatar_spatial_pos == (0,0,0): eventlet.greenthread.sleep(0)
+       self.recalculate_visual()
+       return self.avatar_spatial_pos
    def set_avatar_pos(self,avatar_pos):
        """ Set the position of the AI avatar in 3D space
        """
@@ -68,6 +74,12 @@ class YATEMap:
                 eventlet.greenthread.sleep(0)
        if self.voxels.has_key(spatial_pos): return self.voxels[spatial_pos]
        return base.YateBaseVoxel(spatial_pos=spatial_pos,basic_type=YATE_VOXEL_UNKNOWN)
+   def is_visible(self,spatial_pos):
+       """ Returns true if the specified coordinates are inside the visual range
+       """
+       if utils.check_within(spatial_pos,self.visual_range_start,self.visual_range_end):
+          return True
+       return False
    def set_voxel(self,voxel):
        """ Sets a voxel - takes a voxel object (see base.py) and updates the map with that object
        """

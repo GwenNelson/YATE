@@ -32,7 +32,7 @@ def create_env():
     env = {}
     x = 0
     y = 0
-    z = 0 # because it's 2D, everything is on a single plane
+    z = 1 # because it's 2D, everything is on a single plane
     avatar_pos = None
     for line in mock_environment.split('\n'):
         if len(line)>1:
@@ -85,8 +85,8 @@ class MockDriver(base.YateBaseDriver):
    def get_vision_range(self):
        return self.visual_range
    def get_voxel(self,spatial_pos):
-       if self.env.has_key(tuple(spatial_pos)):
-          return self.env[tuple(spatial_pos)]
+       if self.env.has_key(spatial_pos):
+          return self.env[spatial_pos]
        else:
           return base.YateBaseVoxel(spatial_pos,basic_type=YATE_VOXEL_UNKNOWN) # if outside of the map, the unknown void wherein Azathoth lurks (or something)
 

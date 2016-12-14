@@ -34,7 +34,11 @@ class YateBaseVoxel:
           self.specific_type = from_params[2]
           self.active_state  = from_params[3]
           self.intact_state  = from_params[4]
-       
+
+   def get_basic_type(self):
+       """ return the basic type of the voxel as an integer
+       """
+       return self.basic_type       
    def get_pos(self):
        """ return a tuple representing the 3D spatial coordinates of this voxel
        """

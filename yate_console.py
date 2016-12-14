@@ -8,11 +8,41 @@ from yate import yatelog
 
 from yate import yateclient
 
+from yate import yateproto
+
+from yate.yateproto import *
+
+
+# see init_color_pairs() below
 TOPSTATUS         = 1
 TOPSTATUS_ONLINE  = 2
 TOPSTATUS_OFFLINE = 3
 TOPSTATUS_FG = curses.COLOR_WHITE
 TOPSTATUS_BG = curses.COLOR_BLUE
+
+VOXEL_COLOR_PAIR = 4
+
+voxel_colors = {YATE_VOXEL_EMPTY:              curses.COLOR_BLACK,
+                YATE_VOXEL_TOTAL_OBSTACLE:     curses.COLOR_RED,
+                YATE_VOXEL_EASY_OBSTACLE:      curses.COLOR_GREEN,
+                YATE_VOXEL_DOOR_OBSTACLE:      curses.COLOR_YELLOW,
+                YATE_VOXEL_DOOR_EASY_DESTROY:  curses.COLOR_YELLOW,
+                YATE_VOXEL_DOOR_HARD_DESTROY:  curses.COLOR_YELLOW,
+                YATE_VOXEL_HARD_OBSTACLE:      curses.COLOR_RED,
+                YATE_VOXEL_UNKNOWN:            curses.COLOR_WHITE}
+
+voxel_static      = ' '
+voxel_destroyable = '#'
+voxel_unknown     = '?'
+
+voxel_chars = {YATE_VOXEL_EMPTY:              voxel_static,
+               YATE_VOXEL_TOTAL_OBSTACLE:     voxel_static,
+               YATE_VOXEL_EASY_OBSTACLE:      voxel_destroyable,
+               YATE_VOXEL_DOOR_OBSTACLE:      voxel_static,
+               YATE_VOXEL_DOOR_EASY_DESTROY:  voxel_destroyable,
+               YATE_VOXEL_DOOR_HARD_DESTROY:  voxel_destroyable,
+               YATE_VOXEL_HARD_OBSTACLE:      voxel_destroyable,
+               YATE_VOXEL_UNKNOWN:            voxel_unknown}
 
 class YATEConsoleApp:
    def __init__(self,scr):
@@ -25,13 +55,11 @@ class YATEConsoleApp:
        self.y,self.x = self.scr.getbegyx()
        self.h,self.w = self.scr.getmaxyx()
 
-       self.log_win   = self.scr.subwin(self.h-4,self.w-2,self.y+3,self.x+1)
-       self.log_win.move(1,0)
-       self.log_win.scrollok(True)
-       self.log_panel = curses.panel.new_panel(self.log_win)
-       self.logger    = yatelog.get_curses_logger(self.log_win)
+       self.init_log()
+       self.init_voxel_display()
+
        self.disp_func = self.log_display
-       self.client    = yateclient.YATEClient(connect_cb = self.connect_cb)
+       self.client    = yateclient.YATEClient(connect_cb = self.connect_cb, voxel_update_cb=self.voxel_update_cb)
        self.running = True
        yatelog.info('yate_console','Starting up')
        self.draw_scr()
@@ -44,6 +72,42 @@ class YATEConsoleApp:
        curses.init_pair(TOPSTATUS,TOPSTATUS_FG,TOPSTATUS_BG)
        curses.init_pair(TOPSTATUS_ONLINE,curses.COLOR_GREEN,TOPSTATUS_BG)
        curses.init_pair(TOPSTATUS_OFFLINE,curses.COLOR_RED,TOPSTATUS_BG)
+       # create some color pairs for voxel types in a hacky way
+       for item in dir(yateproto):
+           if item.startswith('YATE_VOXEL_'):
+              curses.init_pair(VOXEL_COLOR_PAIR + getattr(yateproto,item), curses.COLOR_WHITE,voxel_colors[getattr(yateproto,item)])
+
+   def init_log(self):
+       self.log_win   = self.scr.subwin(self.h-4,self.w-2,self.y+3,self.x+1)
+       self.log_win.move(1,0)
+       self.log_win.scrollok(True)
+       self.log_panel = curses.panel.new_panel(self.log_win)
+       self.logger    = yatelog.get_curses_logger(self.log_win)
+
+   def voxel_update_cb(self,voxel):
+       """ If a voxel is updated within the visual range and on the same level as the avatar, update the display
+       """
+       vox_pos           = voxel.get_pos()
+       voxmap            = self.client.get_map()
+       if not voxmap.is_visible(vox_pos): return
+
+       avatar_pos        = voxmap.get_avatar_pos()
+       av_x,av_y,av_z    = avatar_pos
+       vox_x,vox_y,vox_z = vox_pos
+
+       self.voxel_win.addstr(vox_y,vox_x,voxel_chars[voxel.get_basic_type()],curses.color_pair(VOXEL_COLOR_PAIR+voxel.get_basic_type()))
+       self.scr.refresh()
+       self.draw_scr()
+   def init_voxel_display(self):
+       self.voxel_win   = curses.newwin(self.h-3,self.w-2,self.y+2,self.x+1)
+       self.voxel_win.move(1,0)
+
+       self.voxel_panel = curses.panel.new_panel(self.voxel_win)
+       self.voxel_panel.bottom()
+       self.voxel_panel.hide()
+       for x in xrange(self.x+1,self.w-3,1):
+           for y in xrange(self.y+3,self.h-5):
+               self.voxel_win.addstr(y,x,'?',curses.color_pair(VOXEL_COLOR_PAIR+yateproto.YATE_VOXEL_UNKNOWN))
    def main_ui_loop(self):
        while self.running:
           eventlet.greenthread.sleep(0)
@@ -56,6 +120,15 @@ class YATEConsoleApp:
           try:
              if inkey == 'c': self.connect()
              if inkey == 'q': self.running = False
+             if self.client.is_connected():
+                if inkey == 'v':
+                   self.disp_func = self.voxel_display
+                   self.scr.refresh()
+                   self.draw_scr()
+                if inkey == 'l':
+                   self.disp_func = self.log_display
+                   self.scr.refresh()
+                   self.draw_scr()
           except Exception,e:
              yatelog.minor_exception('yate_console','')
           try:
@@ -85,6 +158,12 @@ class YATEConsoleApp:
        curses.curs_set(0)
        self.scr.nodelay(1)
        self.client.connect_to(('127.0.0.1',int(port_str)))
+   def voxel_display(self):
+       self.voxel_panel.top()
+       self.voxel_panel.show()
+       self.voxel_win.box()
+       self.voxel_win.refresh()
+       curses.panel.update_panels()
    def log_display(self):
        self.log_panel.top()
        self.log_panel.show()
