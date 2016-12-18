@@ -183,12 +183,19 @@ class YATEConsoleApp:
        self.log_panel.show()
        self.log_win.box()
        curses.panel.update_panels()
+   def get_status_str(self):
+       retval  = ''
+       vis_range = self.client.get_visual_range()
+       retval += 'VisRange[%s,%s,%s] ' % (vis_range[0],vis_range[1],vis_range[2])
+       retval += 'Pos[%s,%s,%s] ' % (self.av_pos[0],self.av_pos[1],self.av_pos[2])
+       return retval
    def draw_status(self):
        self.scr.addstr(self.y+1,self.x+1,' '*(self.w-2),curses.color_pair(TOPSTATUS))
        self.scr.addstr(self.y+2,self.x+1,' '*(self.w-2),curses.color_pair(TOPSTATUS))
        self.scr.addstr(self.y+1,self.x+2,'Connection status: ',curses.color_pair(TOPSTATUS))
        if self.client.is_connected():
           self.scr.addstr(self.y+1,self.x+21,'Online ',curses.color_pair(TOPSTATUS_ONLINE)|curses.A_BOLD)
+          self.scr.addstr(self.y+1,self.x+28,'Status: %s' % self.get_status_str(),curses.color_pair(TOPSTATUS)|curses.A_BOLD)
           self.scr.addstr(self.y+2,self.x+2,'[Q quit] [V voxel view] [L log view] [H health view] [I inventory view] [/ enter command] [wasd manual move]',curses.color_pair(TOPSTATUS))
        else:
           self.scr.addstr(self.y+1,self.x+21,'Offline',curses.color_pair(TOPSTATUS_OFFLINE)|curses.A_BOLD)

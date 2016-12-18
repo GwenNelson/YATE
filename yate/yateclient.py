@@ -48,6 +48,12 @@ class YATEClient:
        self.sock.send_move_vector(*v,to_addr = self.server_addr)
    def get_port(self):
        return self.sock.get_endpoint()[1]
+   def get_visual_range(self):
+       """ Return the current visual range or (0,0,0) if unknown
+       """
+       if self.visual_range != None: return self.visual_range
+       self.sock.send_request_range()
+       return (0,0,0)
    def handle_bulk_voxel(self,msg_params,from_addr,msg_id):
        """ bulk voxel updates are preferred for performance reasons
        """

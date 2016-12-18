@@ -27,7 +27,7 @@ class YATEServer:
        self.sock.send_avatar_pos(pos[0],pos[1],pos[2],to_addr=from_addr)
    def handle_request_range(self,msg_params,from_addr,msg_id):
        visual_range = self.driver.get_vision_range()
-       self.send_visual_range(*visual_range, to_addr=from_addr)
+       self.sock.send_visual_range(*visual_range, to_addr=from_addr)
    def handle_request_voxel(self,msg_params,from_addr,msg_id):
        voxel_data = self.driver.get_voxel(msg_params)
        self.send_voxel_update(voxel_data.as_msgparams())

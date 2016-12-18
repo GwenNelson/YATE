@@ -5,7 +5,7 @@ import curses
 
 logger      = None
 formatter   = None
-loglevel    = logging.DEBUG
+loglevel    = logging.INFO
 
 class CursesHandler(logging.StreamHandler):
    def __init__(self,curses_win=None):
