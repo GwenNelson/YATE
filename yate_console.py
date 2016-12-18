@@ -12,6 +12,7 @@ from yate import yateproto
 
 from yate.yateproto import *
 
+import shlex
 
 # see init_color_pairs() below
 TOPSTATUS         = 1
@@ -44,6 +45,7 @@ voxel_chars = {YATE_VOXEL_EMPTY:              voxel_static,
                YATE_VOXEL_HARD_OBSTACLE:      voxel_destroyable,
                YATE_VOXEL_UNKNOWN:            voxel_unknown}
 
+
 class YATEConsoleApp:
    def __init__(self,scr):
        self.scr = scr
@@ -59,6 +61,8 @@ class YATEConsoleApp:
        self.init_log()
        self.init_voxel_display()
        self.percept_delay = 0
+
+       self.cmdfuncs = {'help':self.helpfunc}
 
        self.disp_func = self.log_display
        self.client    = yateclient.YATEClient(voxel_update_cb=self.voxel_update_cb,avatar_pos_cb=self.avatar_pos_cb)
@@ -78,6 +82,14 @@ class YATEConsoleApp:
        for item in dir(yateproto):
            if item.startswith('YATE_VOXEL_'):
               curses.init_pair(VOXEL_COLOR_PAIR + getattr(yateproto,item), curses.COLOR_WHITE,voxel_colors[getattr(yateproto,item)])
+
+   def helpfunc(self):
+       return """
+ See the readme file for proper instructions, here's a list of available commands, any other commands typed will be relayed to your bot (if one is connected to the same proxy)
+  %s
+""" % ','.join(self.cmdfuncs.keys())
+
+
 
    def init_log(self):
        self.log_win   = self.scr.subwin(self.h-4,self.w-2,self.y+3,self.x+1)
@@ -141,6 +153,8 @@ class YATEConsoleApp:
              if inkey == 'c': self.connect()
              if inkey == 'q': self.running = False
              if self.client.is_connected():
+                if inkey == '/':
+                   self.cmd()
                 if inkey == 'v':
                    self.disp_func = self.voxel_display
                    self.draw_scr()
@@ -156,21 +170,33 @@ class YATEConsoleApp:
              self.draw_scr()
           except Exception,e:
              pass
-   def connect(self):
+   def getinstr(self,prompt):
        self.scr.nodelay(0)
        self.scr.addstr(self.y+2,self.x+1,' '*(self.w-2),curses.color_pair(TOPSTATUS))
-       self.scr.addstr(self.y+2,self.x+1,' Enter port number on localhost: ',curses.color_pair(TOPSTATUS))
+       self.scr.addstr(self.y+2,self.x+1,prompt,curses.color_pair(TOPSTATUS))
        self.scr.refresh()
        curses.curs_set(1)
        curses.echo()
        self.scr.attron(curses.color_pair(TOPSTATUS))
-       port_str = self.scr.getstr(self.y+2,self.x+34,8)
-       self.scr.addstr(self.y+2,self.x+34,str(port_str),curses.color_pair(TOPSTATUS))
+       retval = self.scr.getstr(self.y+2,self.x+len(prompt)+1,8)
+       self.scr.addstr(self.y+2,self.x+len(prompt)+1,str(retval),curses.color_pair(TOPSTATUS))
        self.scr.attroff(curses.color_pair(TOPSTATUS))
        self.scr.refresh()
        curses.noecho()
        curses.curs_set(0)
        self.scr.nodelay(1)
+       return retval
+   def cmd(self):
+       cmdline = self.getinstr('/')
+       if len(cmdline) < 2: return
+       splitline = shlex.split(cmdline)
+       if self.cmdfuncs.has_key(splitline[0]):
+          retval = self.cmdfuncs[splitline[0]](*splitline[1:])
+          yatelog.info(splitline[0],retval)
+       else:
+          yatelog.info('yate_console','relaying command to any connected AGI: %s' % str(splitline))
+   def connect(self):
+       port_str = self.getinstr(' Enter port number on localhost: ')
        self.client.connect_to(('127.0.0.1',int(port_str)))
    def voxel_display(self):
        self.voxel_panel.top()
