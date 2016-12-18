@@ -33,7 +33,7 @@ class YATEMap:
                for z in xrange(self.visual_range_start[2],self.visual_range_end[2],1):
                    eventlet.greenthread.sleep(0)
                    if not self.voxels.has_key((x,y,z)):
-                      self.client.send_request_voxel(x,y,z)
+                      self.client.sock.send_request_voxel(x,y,z)
                       return False
        return True
    def set_visual_range(self,visual_range):

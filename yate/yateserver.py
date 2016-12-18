@@ -31,10 +31,10 @@ class YATEServer:
        if self.driver.changed_since(check_time):
           yatelog.debug('YATEServer','Sending updates to client due to out of date timestamp %s' % time.ctime(check_time))
           visual_range = self.driver.get_vision_range()
-          self.sock.send_visual_range(visual_range, to_addr=from_addr)
+          self.sock.send_visual_range(*visual_range, to_addr=from_addr)
 
           avatar_pos   = self.driver.get_pos()
-          self.sock.send_avatar_pos(avatar_pos,to_addr=from_addr)
+          self.sock.send_avatar_pos(*avatar_pos,to_addr=from_addr)
        
           # calculate where the visible voxels begin and end
           start_x = avatar_pos[0]-(visual_range[0]/2)
