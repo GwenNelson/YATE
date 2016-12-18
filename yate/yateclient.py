@@ -1,7 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
-import socket
+import yatesock
 import yatelog
 
 import yateproto
@@ -10,15 +10,6 @@ from yateproto import *
 
 import time
 import utils
-
-class YATEMethod:
-   """ Wrapper used to dynamically call methods that transmit a message, for the win
-   """
-   def __init__(self,client,msgtype):
-       self.msgtype = msgtype
-       self.client  = client
-   def __call__(self,*params):
-       return send_yate_msg(self.msgtype,params,self.client.server_addr,self.client.sock)
 
 class YATEMap:
    """ This class represents a voxel grid in 3D space and implements simple queries on that 3D space
@@ -115,14 +106,9 @@ class YATEClient:
        self.disconnect_cb   = disconnect_cb
        self.voxel_update_cb = voxel_update_cb
        self.avatar_pos_cb   = avatar_pos_cb
-       self.sock        = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-       self.sock.bind(('127.0.0.1',0))
+       self.sock            = yatesock.YATESocket()
        self.pool = eventlet.GreenPool(1000)
-       self.last_acked = set()
-       self.in_q = eventlet.queue.LightQueue()
        self.handlers = {MSGTYPE_CONNECT_ACK:  self.handle_connect_ack,
-                        MSGTYPE_KEEPALIVE:    self.handle_keepalive,
-                        MSGTYPE_KEEPALIVE_ACK:self.handle_keepalive_ack,
                         MSGTYPE_VISUAL_RANGE: self.handle_visual_range,
                         MSGTYPE_VOXEL_UPDATE: self.handle_voxel_update,
                         MSGTYPE_AVATAR_POS:   self.handle_avatar_pos}
@@ -130,19 +116,12 @@ class YATEClient:
        self.envmap = YATEMap(self)
        self.last_update = 0
 
-   def __getattr__(self,name):
-       """ This is used to implement message stuff in a hackish way
-       """
-       if name.startswith('send_'):
-          msgtype_name = 'MSGTYPE_%s' % (name[5:].upper())
-          if hasattr(yateproto,msgtype_name):
-             return YATEMethod(self,getattr(yateproto,msgtype_name))
    def move_vector(self,v):
        """ Send a request to move in the specified vector if possible
        """
-       self.send_move_vector(*v)
+       self.sock.send_move_vector(*v)
    def get_map(self):
-       """ Return the map used by this client - this should be treated as read only outside of the client class
+       """ Return the map used by shis client - this should be treated as read only outside of the client class
        """
        return self.envmap
    def mark_dirty(self):
@@ -154,7 +133,7 @@ class YATEClient:
        """
        self.last_update = time.time()
    def get_port(self):
-       return self.sock.getsockname()[1]
+       return self.sock.get_endpoint()[1]
    def refresh_vis(self,voxel_pos=None,entity_id=None):
        """ Call this to request a refresh of the visual perceptions
            This will only update what is within visual range of the AI's avatar and it is only a request - the request may not be honoured
@@ -165,84 +144,51 @@ class YATEClient:
            The server will only send updates if that time has passed unless the client requests a single voxel or entity
        """
        if voxel_pos != None:
-          self.send_request_voxel(voxel_pos)
+          self.sock.send_request_voxel(voxel_pos)
           return
        if entity_id != None:
+          self.sock.send_request_entity(entity_id)
           return
        if not self.envmap.is_complete():
           self.mark_dirty()
        self.send_request_visual(self.last_update)
-   def handle_visual_range(self,msg_params,msg_id):
+   def handle_visual_range(self,msg_params,from_addr,msg_id):
        self.envmap.set_visual_range(msg_params)
        self.mark_updated()
-   def handle_voxel_update(self,msg_params,msg_id):
+   def handle_voxel_update(self,msg_params,from_addr,msg_id):
        new_vox = base.YateBaseVoxel(from_params = msg_params)
        self.envmap.set_voxel(new_vox)
        self.mark_updated()
-       if self.voxel_update_cb != None: self.pool.spawn_n(self.voxel_update_cb,new_vox)
-   def handle_avatar_pos(self,msg_params,msg_id):
+       if self.voxel_update_cb != None: self.voxel_update_cb(new_vox)
+   def handle_avatar_pos(self,msg_params,from_addr,msg_id):
        self.envmap.set_avatar_pos(msg_params)
        self.mark_updated()
-       if self.avatar_pos_cb != None: self.pool.spawn_n(self.avatar_pos_cb,msg_params)
-   def handle_keepalive(self,msg_params,msg_id):
-       send_yate_msg(MSGTYPE_KEEPALIVE_ACK,[msg_id],self.server_addr,self.sock)
-   def handle_keepalive_ack(self,msg_params,msg_id):
-       self.last_acked.add(msg_params[0])
+       if self.avatar_pos_cb != None: self.avatar_pos_cb(msg_params)
    def handle_connect_ack(self,msg_params,msg_id):
        yatelog.info('YATEClient','Successfully connected to server')
        self.ready = True
-       self.pool.spawn_n(self.do_keepalive)
        if self.connect_cb != None: self.connect_cb()
+       self.pool.spawn_n(self.do_keepalive)
    def do_keepalive(self):
-       last_id = send_yate_msg(MSGTYPE_KEEPALIVE,[],self.server_addr,self.sock)
        while self.ready:
-          self.last_acked.discard(last_id)
-          last_id = send_yate_msg(MSGTYPE_KEEPALIVE,[],self.server_addr,self.sock)
-          eventlet.greenthread.sleep(YATE_KEEPALIVE_TIMEOUT)
-          if not (last_id in self.last_acked):
+          eventlet.greenthread.sleep(YATE_KEEPALIVE_TIMEOUT+1)
+          if not self.sock.is_connected(self.server_addr):
              yatelog.info('YATEClient','Timed out server')
              self.ready     = False
              self.connected = False
              if self.disconnect_cb != None: self.disconnect_cb()
-   def proc_packets(self):
-       while self.connected:
-          eventlet.greenthread.sleep(0)
-          try:
-             data,addr = self.in_q.get_nowait()
-             parsed_data = msgpack.unpackb(data)
-             msg_type    = parsed_data[0]
-             msg_params  = parsed_data[1]
-             msg_id      = parsed_data[2]
-             if addr != self.server_addr:
-                send_yate_msg(MSGTYPE_UNKNOWN_PEER,[],addr,self.sock)
-             else:
-                if self.handlers.has_key(msg_type):
-                   yatelog.debug('YATEClient','Got message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
-                   self.handlers[msg_type](msg_params,msg_id)
-                else:
-                   yatelog.warn('YATEClient','Unhandled message %s from %s:%s' % (str([msgtype_str[msg_type],msg_params,msg_id]),addr[0],addr[1]))
-          except:
-             pass
-   def read_packets(self):
-       yatelog.info('YATEClient','Bound local port at %s' % self.get_port())
-       while self.connected:
-          eventlet.greenthread.sleep(0)
-          try:
-             data,addr = self.sock.recvfrom(8192)
-             self.in_q.put_nowait([data,addr])
-          except:
-             pass
    def stop(self):
        """ Stop the client - terminate any threads and close the socket cleanly
        """
-       self.connected = False
+       self.ready = False
+       self.sock.stop()
        self.pool.waitall()
-       self.sock.shutdown()
+       self.server_addr = None
    def is_connected(self):
        """ returns a boolean value indicating whether or not we're connected AND ready to talk to the proxy
        """
        if self.server_addr == None: return False
-       if not self.connected: return False
+       if not self.sock.is_connected(self.server_addr): return False
        if not self.ready: return False
        return True
    def connect_to(self,server_addr):
@@ -250,8 +196,4 @@ class YATEClient:
        """
        yatelog.info('YATEClient','Connecting to server at %s:%s' % server_addr)
        self.server_addr = server_addr
-       self.connected = True
-       self.pool.spawn_n(self.read_packets)
-       for x in xrange(10): self.pool.spawn(self.proc_packets)
-       self.connect_id  = send_yate_msg(MSGTYPE_CONNECT,(),server_addr,self.sock)
-
+       self.sock.connect_to(server_addr)

@@ -59,6 +59,22 @@ class YATESocket:
        self.last_pack   = {}    # store the timestamp of the last packet from a particular peer so we can do timeouts
        self.pool.spawn_n(self.recv_thread)
        self.pool.spawn_n(self.timeout_thread) # timeout peers all in a central location, giving plenty of time for them to send packets and not timeout
+   def stop(self):
+       """ terminate threads and close cleanly
+       """
+       self.active = False
+       self.pool.waitall()
+       self.sock.shutdown()
+   def connect_to(self,addr):
+       """ Connect to the specified remote peer - this pretty much only really makes sense for clients
+       """
+       yatelog.info('YATESock','Connecting to peer at %s:%s' % addr)
+       self.send_connect(to_addr=addr)
+       msg_id = self.handle_connect(tuple(),addr,msg_id)
+   def is_connected(self,addr):
+       """ Query if the specified peer is still connected
+       """
+       return addr in self.known_peers
    def get_endpoint(self):
        """ Return the IP endpoint this socket is bound to
        """
@@ -95,17 +111,17 @@ class YATESocket:
        self.known_peers.discard(from_addr)
        yatelog.info('YATESock','Peer %s:%s does not know us, perhaps we timed out?' % from_addr)
    def handle_connect_ack(self,msg_params,from_addr,msg_id):
-       """ Confirmed new clients - only really here to shutup the warning when not overridden
+       """ Confirmed new peers - only really here to shutup the warning when not overridden
        """
        yatelog.debug('YATESock','Confirmed connection to %s:%s' % from_addr)
    def handle_connect(self,msg_params,from_addr,msg_id):
-       """ Handle new clients
+       """ Handle new peers - this is also called when we connect outwards, so don't subclass and override it like a fool
        """
        self.known_peers.add(from_addr)
        self.pool.spawn_n(self.do_keepalive,from_addr) # send packets to this peer on a regular basis
        self.send_connect_ack(msg_id,to_addr=from_addr)
    def timeout_thread(self):
-       """ kill clients that have timed out
+       """ kill peers that have timed out
        """
        while self.active:
           eventlet.greenthread.sleep(YATE_KEEPALIVE_TIMEOUT)
@@ -129,7 +145,7 @@ class YATESocket:
        """
        self.send_keepalive_ack(msg_id,to_addr=from_addr)
    def handle_keepalive_ack(self,msg_params,from_addr,msg_id):
-       """ Do nothing, absolutely nothing - the receive loop tracks stuff for us
+       """ Do nothing, absolutely nothing, fuck all, zilch, zero - the receive loop tracks stuff for us
        """
        pass
    def msg_reader_thread(self, msg_type):
