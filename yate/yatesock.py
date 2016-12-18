@@ -8,6 +8,7 @@ import msgpack
 from yateproto import *
 
 import yatelog
+import time
 
 class YATESockSendMethod:
    def __init__(self,msg_type,sock):
@@ -24,8 +25,9 @@ class YATESockSendMethod:
 class YATESocket:
    """ implements a UDP socket with message queues and async goodness and stuff
    """
-   def __init__(self,bind_ip='127.0.0.1',bind_port=0,handlers={}):
+   def __init__(self,bind_ip='127.0.0.1',bind_port=0,handlers={},enable_null_handle=True):
        """ handlers is a dict mapping message type integers to functions that take the params (msg_params,msg_id,from_addr,sock)
+           enable_null_handle enables a default "null handler" that does nothing with unhandled message types except logging them to debug
        """
        self.sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
        self.sock.bind((bind_ip,bind_port))
@@ -35,9 +37,15 @@ class YATESocket:
        self.in_queues  = {}                             # packets coming in from remote peer go here after parsing, each message type has an independent queue so we can do QoS-type stuff
        self.out_queues = {}                             # packets going out to remote peer go here
        self.parse_q    = eventlet.queue.LightQueue(0)   # to keep up performance, packets go here before parsing
-       self.handlers   = {MSGTYPE_CONNECT:self.handle_connect}
+       self.handlers   = {MSGTYPE_CONNECT:      self.handle_connect,       # a couple of standard message handlers, override by passing in new handlers
+                          MSGTYPE_UNKNOWN_PEER: self.handle_unknown_peer,
+                          MSGTYPE_CONNECT_ACK:  self.handle_connect_ack,
+                          MSGTYPE_KEEPALIVE:    self.handle_keepalive,
+                          MSGTYPE_KEEPALIVE_ACK:self.handle_keepalive_ack}
        self.handlers.update(handlers)
+       self.enable_null_handle = enable_null_handle
        self.active     = True
+
        for x in xrange(10): self.pool.spawn_n(self.parser_thread)
        for k,v in msgtype_str.items():
            self.in_queues[k]  = eventlet.queue.LightQueue(0)
@@ -45,8 +53,12 @@ class YATESocket:
            setattr(self,'send_%s' % v[8:].lower(),YATESockSendMethod(k,self)) # black magic
            for x in xrange(2): self.pool.spawn_n(self.msg_sender_thread,k)
            for x in xrange(2): self.pool.spawn_n(self.msg_reader_thread,k)
+           if enable_null_handle:
+              if not self.handlers.has_key(k): self.handlers[k] = self.null_handler
        self.known_peers = set() # if this is a server, this set contains the list of clients, if it's a client this contains only 1 member - the server
+       self.last_pack   = {}    # store the timestamp of the last packet from a particular peer so we can do timeouts
        self.pool.spawn_n(self.recv_thread)
+       self.pool.spawn_n(self.timeout_thread) # timeout peers all in a central location, giving plenty of time for them to send packets and not timeout
    def get_endpoint(self):
        """ Return the IP endpoint this socket is bound to
        """
@@ -73,11 +85,53 @@ class YATESocket:
              msgdata    = msgpack.packb((msg_type,msg_params,msg_id))
              self.sock.sendto(msgdata,to_addr)
              yatelog.debug('YATESocket','Sent message %s to %s:%s' % (msg_type_s,to_addr[0],to_addr[1]))
+   def null_handler(self,msg_params,from_addr,msg_id):
+       """ null handler - just dumps the message to log
+       """
+       yatelog.info('YATESock','Null handler dump: message ID %s from %s:%s: %s' % (msg_id,from_addr[0],from_addr[1],str(msg_params)))
+   def handle_unknown_peer(self,msg_params,from_addr,msg_id):
+       """ Handle the UNKNOWN_PEER message
+       """
+       self.known_peers.discard(from_addr)
+       yatelog.info('YATESock','Peer %s:%s does not know us, perhaps we timed out?' % from_addr)
+   def handle_connect_ack(self,msg_params,from_addr,msg_id):
+       """ Confirmed new clients - only really here to shutup the warning when not overridden
+       """
+       yatelog.debug('YATESock','Confirmed connection to %s:%s' % from_addr)
    def handle_connect(self,msg_params,from_addr,msg_id):
        """ Handle new clients
        """
        self.known_peers.add(from_addr)
+       self.pool.spawn_n(self.do_keepalive,from_addr) # send packets to this peer on a regular basis
        self.send_connect_ack(msg_id,to_addr=from_addr)
+   def timeout_thread(self):
+       """ kill clients that have timed out
+       """
+       while self.active:
+          eventlet.greenthread.sleep(YATE_KEEPALIVE_TIMEOUT)
+          cur_time  = time.time()
+          peer_list = self.known_peers.copy() # thread safety bitches
+          for peer in peer_list:
+              if not self.last_pack.has_key(peer):
+                 yatelog.warn('YATESock','Peer %s:%s never actually sent us a single packet after connecting' % peer)
+                 self.known_peers.discard(peer)
+              if cur_time - self.last_pack[peer] > YATE_KEEPALIVE_TIMEOUT:
+                 yatelog.info('YATESock','Peer %s:%s has timed out, bye' % peer)
+                 self.known_peers.discard(peer)
+   def do_keepalive(self,client_addr):
+       """ send keepalive packets to the peer so we don't time out
+       """
+       while self.active and (client_addr in self.known_peers):
+          eventlet.greenthread.sleep(YATE_KEEPALIVE_TIMEOUT/2)
+          if client_addr in self.known_peers: self.send_keepalive(to_addr=client_addr)
+   def handle_keepalive(self,msg_params,from_addr,msg_id):
+       """ Send back KEEPALIVE_ACK so we don't time out
+       """
+       self.send_keepalive_ack(msg_id,to_addr=from_addr)
+   def handle_keepalive_ack(self,msg_params,from_addr,msg_id):
+       """ Do nothing, absolutely nothing - the receive loop tracks stuff for us
+       """
+       pass
    def msg_reader_thread(self, msg_type):
        """ This is used internally to handle all messages of the specified type when they come in from the parser thread
        """
@@ -121,7 +175,11 @@ class YATESocket:
              data,addr = self.sock.recvfrom(8192)
           except:
              pass
-          if data != None: self.parse_q.put((data,addr))
+          if data != None:
+             # store the actual time we got the packet here, it's not fair to timeout peers for our slow parsing
+             if addr in self.known_peers: # but don't open up a very silly DDoS vulnerability
+                self.last_pack[addr] = time.time()
+             self.parse_q.put((data,addr))
 
    def parser_thread(self):
        while self.active:

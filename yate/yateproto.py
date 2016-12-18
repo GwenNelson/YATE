@@ -60,7 +60,7 @@ MSGTYPE_HALT_MOVEMENT      = 25 # ()                                        requ
 MSGTYPE_REQUEST_VELACC     = 26 # ()                                        request the current velocity and acceleration of the avatar
 MSGTYPE_AVATAR_VELACC      = 27 # ((vel_x,vel_y,vel_z),(acc_x,acc_y,acc_z)  tells the peer the current avatar velocity and acceleration
 
-YATE_KEEPALIVE_TIMEOUT = 2 # in seconds
+YATE_KEEPALIVE_TIMEOUT = 5 # in seconds
 
 # for performance reasons, the below is used instead of strings for keys in the clients dictionary in yateserver.py
 YATE_LAST_ACKED = 0 # a set of message IDs from incoming ACK packets - we use a set cos UDP can be weird
