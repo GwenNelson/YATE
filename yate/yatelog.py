@@ -48,16 +48,16 @@ def get_logger():
 def info(component,message):
     """ Log general info stuff
     """
-    cmp_s = '%12s' % component
+    cmp_s = '%10s' % component
     logger.info('%s: %s',cmp_s,message)
 
 def debug(component,message):
     if loglevel < logging.DEBUG: return
-    cmp_s = '%12s' % component
+    cmp_s = '%10s' % component
     logger.debug('%s: %s',cmp_s,message)
 
 def warn(component,message):
-    cmp_s = '%12s' % component
+    cmp_s = '%10s' % component
     logger.warn('%s: %s',cmp_s,message)
 
 def minor_exception(component,message):

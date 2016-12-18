@@ -56,7 +56,8 @@ class YATEServer:
    def send_voxel_update(self,voxel_pos,client_addr):
        yatelog.debug('YATEServer','Updating voxel at %s' % str(voxel_pos))
        voxel_data = self.driver.get_voxel(voxel_pos)
-       self.sock.send_voxel_update(voxel_data.as_msgparams(),to_addr=client_addr)
+       msgparams  = voxel_data.as_msgparams()
+       self.sock.send_voxel_update(*msgparams,to_addr=client_addr)
    def get_port(self):
        return self.sock.get_endpoint()[1]
 

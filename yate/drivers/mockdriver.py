@@ -79,9 +79,9 @@ class MockDriver(base.YateBaseDriver):
    def get_vision_range(self):
        return self.visual_range
    def get_voxel(self,voxel_pos):
-       if self.env.has_key(tuple(voxel_pos)):
-          return self.env[tuple(voxel_pos)]
+       if self.env.has_key(voxel_pos):
+          return self.env[voxel_pos]
        else:
-          return base.YateBaseVoxel(spatial_pos=tuple(voxel_pos),basic_type=YATE_VOXEL_UNKNOWN) # if outside of the map, the unknown void wherein Azathoth lurks (or something)
+          return base.YateBaseVoxel(spatial_pos=voxel_pos,basic_type=YATE_VOXEL_UNKNOWN) # if outside of the map, the unknown void wherein Azathoth lurks (or something)
 
 driver = MockDriver()

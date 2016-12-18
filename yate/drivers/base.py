@@ -23,13 +23,13 @@ class YateBaseVoxel:
                          if specified, from_params overrides other params
        """
        if from_params is None:
-          self.spatial_pos   = tuple(spatial_pos)
+          self.spatial_pos   = spatial_pos
           self.basic_type    = basic_type
           self.specific_type = specific_type
           self.active_state  = active_state
           self.intact_state  = intact_state
        else:
-          self.spatial_pos   = tuple(from_params[0])
+          self.spatial_pos   = from_params[0]
           self.basic_type    = from_params[1]
           self.specific_type = from_params[2]
           self.active_state  = from_params[3]
@@ -46,7 +46,7 @@ class YateBaseVoxel:
    def as_msgparams(self):
        """ return a tuple representing this voxel as message params for MSGTYPE_VOXEL_UPDATE
        """
-       return (self.spatial_pos,self.basic_type,self.specific_type,self.active_state,self.intact_state)
+       return self.spatial_pos,self.basic_type,self.specific_type,self.active_state,self.intact_state
    def is_intact(self):
        """" return a boolean value indicating whether or not this voxel is fully intact
             if it's partly destroyed, this will return false

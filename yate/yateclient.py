@@ -106,16 +106,15 @@ class YATEClient:
        self.disconnect_cb   = disconnect_cb
        self.voxel_update_cb = voxel_update_cb
        self.avatar_pos_cb   = avatar_pos_cb
-       self.sock            = yatesock.YATESocket()
        self.pool = eventlet.GreenPool(1000)
        self.handlers = {MSGTYPE_CONNECT_ACK:  self.handle_connect_ack,
                         MSGTYPE_VISUAL_RANGE: self.handle_visual_range,
                         MSGTYPE_VOXEL_UPDATE: self.handle_voxel_update,
                         MSGTYPE_AVATAR_POS:   self.handle_avatar_pos}
-       if self.server_addr != None: self.connect_to(self.server_addr)
+       self.sock   = yatesock.YATESocket(handlers=self.handlers)
        self.envmap = YATEMap(self)
        self.last_update = 0
-
+       if self.server_addr != None: self.connect_to(self.server_addr)
    def move_vector(self,v):
        """ Send a request to move in the specified vector if possible
        """
@@ -151,7 +150,7 @@ class YATEClient:
           return
        if not self.envmap.is_complete():
           self.mark_dirty()
-       self.send_request_visual(self.last_update)
+       self.sock.send_request_visual(self.last_update)
    def handle_visual_range(self,msg_params,from_addr,msg_id):
        self.envmap.set_visual_range(msg_params)
        self.mark_updated()
@@ -164,7 +163,7 @@ class YATEClient:
        self.envmap.set_avatar_pos(msg_params)
        self.mark_updated()
        if self.avatar_pos_cb != None: self.avatar_pos_cb(msg_params)
-   def handle_connect_ack(self,msg_params,msg_id):
+   def handle_connect_ack(self,msg_params,from_addr,msg_id):
        yatelog.info('YATEClient','Successfully connected to server')
        self.ready = True
        if self.connect_cb != None: self.connect_cb()

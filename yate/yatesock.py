@@ -17,7 +17,7 @@ class YATESockSendMethod:
        self.q        = sock.out_queues[msg_type]
    def __call__(self,*args, **kwargs):
        to_addr = None
-       if kwargs.has_key: to_addr = kwargs['to_addr']
+       if kwargs.has_key('to_addr'): to_addr = kwargs['to_addr']
        msg_id = gen_msg_id()
        self.q.put((args,msg_id,to_addr))
        return msg_id
@@ -31,8 +31,8 @@ class YATESocket:
        """
        self.sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
        self.sock.bind((bind_ip,bind_port))
-       yatelog.info('YATESocket','Bound %s:%s' % self.sock.getsockname())
-       yatelog.info('YATESocket','Setting up handlers and queues')
+       yatelog.info('YATESock','Bound %s:%s' % self.sock.getsockname())
+       yatelog.info('YATESock','Setting up handlers and queues')
        self.pool = eventlet.GreenPool(1000)
        self.in_queues  = {}                             # packets coming in from remote peer go here after parsing, each message type has an independent queue so we can do QoS-type stuff
        self.out_queues = {}                             # packets going out to remote peer go here
@@ -69,12 +69,12 @@ class YATESocket:
        """ Connect to the specified remote peer - this pretty much only really makes sense for clients
        """
        yatelog.info('YATESock','Connecting to peer at %s:%s' % addr)
-       self.send_connect(to_addr=addr)
-       msg_id = self.handle_connect(tuple(),addr,msg_id)
+       msg_id = self.send_connect(to_addr=addr)
+       self.handle_connect(tuple(),addr,msg_id)
    def is_connected(self,addr):
        """ Query if the specified peer is still connected
        """
-       return addr in self.known_peers
+       return (addr in self.known_peers)
    def get_endpoint(self):
        """ Return the IP endpoint this socket is bound to
        """
@@ -83,7 +83,6 @@ class YATESocket:
        """ World's simplest QoS implementation is here - just set delay to the number of seconds to wait in between each packet transmission
        """
        msg_type_s = msgtype_str[msg_type]
-       yatelog.debug('YATESock','Send thread for %s starting' % msg_type_s)
        while self.active:
           eventlet.greenthread.sleep(delay)
           msg_tuple = None
@@ -93,14 +92,27 @@ class YATESocket:
                 msg_tuple = self.out_queues[msg_type].get()
              except:
                 yatelog.minor_exception('YATESock','Error reading packet from queue')
-          yatelog.debug('YATESocket','Got message to send, sending it now')
           if msg_tuple != None:
              msg_params = msg_tuple[0]
              msg_id     = msg_tuple[1]
              to_addr    = msg_tuple[2]
              msgdata    = msgpack.packb((msg_type,msg_params,msg_id))
-             self.sock.sendto(msgdata,to_addr)
-             yatelog.debug('YATESocket','Sent message %s to %s:%s' % (msg_type_s,to_addr[0],to_addr[1]))
+             if to_addr==None:
+                yatelog.debug('YATESock','Broadcasting message %s to all peers: %s' % (msg_type,msg_params))
+                peer_list = self.known_peers.copy()
+                for peer in peer_list:
+                    try:
+                       self.sock.sendto(msgdata,peer)
+                       yatelog.debug('YATESock','Sent broadcast message to %s:%s' % peer)
+                    except:
+                       yatelog.minor_exception('YATESock','Error during broadcast of message')
+             else:
+                try:
+                   self.sock.sendto(msgdata,to_addr)
+                   yatelog.debug('YATESock','Sent message %s to %s:%s: %s' % (msg_type_s,to_addr[0],to_addr[1],msg_params))
+                except:
+                   yatelog.minor_exception('YATESock','Error during transmission of message')
+                    
    def null_handler(self,msg_params,from_addr,msg_id):
        """ null handler - just dumps the message to log
        """
@@ -152,7 +164,6 @@ class YATESocket:
        """ This is used internally to handle all messages of the specified type when they come in from the parser thread
        """
        msg_type_s = msgtype_str[msg_type]
-       yatelog.debug('YATESock','Receive thread for %s starting' % msg_type_s)
        while self.active:
           eventlet.greenthread.sleep(0)
           if not self.handlers.has_key(msg_type): # don't bother wasting CPU time on it, just pull from the queue and then do nothing else
@@ -174,8 +185,12 @@ class YATESocket:
              msg_params = msg_tuple[0]
              msg_id     = msg_tuple[1]
              from_addr  = msg_tuple[2]
+             yatelog.debug('YATESock','Got message %s from %s:%s: %s' % (msg_type_s,from_addr[0],from_addr[1],msg_params))
              if (from_addr in self.known_peers):
-                self.handlers[msg_type](msg_params,from_addr,msg_id)
+                try:
+                   self.handlers[msg_type](msg_params,from_addr,msg_id)
+                except:
+                   yatelog.minor_exception('YATESock','Error handling message')
              else:
                 if msg_type == MSGTYPE_CONNECT:
                    self.handle_connect(msg_params,from_addr,msg_id)
@@ -212,9 +227,9 @@ class YATESocket:
             try:
                msg        = msgpack.unpackb(data,use_list = False)
                msg_type   = msg[0]
-               msg_params = tuple(msg[1])
+               msg_params = msg[1]
                msg_id     = msg[2]
                self.in_queues[msg_type].put((msg_params,msg_id,addr))
             except:
-               yatelog.minor_exception('YATESocket','Error while parsing packet from %s:%s' % addr)
+               yatelog.minor_exception('YATESock','Error while parsing packet from %s:%s' % addr)
             gc.enable()
