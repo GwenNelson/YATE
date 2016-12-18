@@ -23,7 +23,7 @@ class YateBaseVoxel:
                          if specified, from_params overrides other params
        """
        if from_params is None:
-          self.spatial_pos   = spatial_pos
+          self.spatial_pos   = (spatial_pos[0],spatial_pos[1],spatial_pos[2])
           self.basic_type    = basic_type
           self.specific_type = specific_type
           self.active_state  = active_state
@@ -34,6 +34,9 @@ class YateBaseVoxel:
           self.specific_type = from_params[2]
           self.active_state  = from_params[3]
           self.intact_state  = from_params[4]
+
+   def __str__(self):
+       return 'VOXEL@%s: basic_type:%s,specific_type:%s' % (str(self.spatial_pos),self.basic_type,self.specific_type)
 
    def get_basic_type(self):
        """ return the basic type of the voxel as an integer
@@ -46,7 +49,7 @@ class YateBaseVoxel:
    def as_msgparams(self):
        """ return a tuple representing this voxel as message params for MSGTYPE_VOXEL_UPDATE
        """
-       return self.spatial_pos,self.basic_type,self.specific_type,self.active_state,self.intact_state
+       return ((self.spatial_pos[0],self.spatial_pos[1],self.spatial_pos[2]),self.basic_type,self.specific_type,self.active_state,self.intact_state)
    def is_intact(self):
        """" return a boolean value indicating whether or not this voxel is fully intact
             if it's partly destroyed, this will return false
@@ -115,25 +118,12 @@ class YateBaseDriver(object):
            if doing so is appropriate. If the setup fails, then the constructor should throw an exception
        """
        self.last_change = time.time()
-   def changed_since(self,timestamp):
-       """ Returns a boolean value indicating whether or not the world has changed since the specified timestamp
-       """
-       if self.last_change >= timestamp: return True
-       return False
-   def mark_changed(self):
-       """ Marks the world as changed, this means that the last changed timestamp will be set to the current time
-       """
-       self.last_change = time.time()
    def get_vision_range(self):
        """ Returns an (x,y,z) tuple representing how many voxels can be perceived by the in-game avatar
-           This must always be an even number on each axis, even if that means losing data
+           This must always be an even number on each axis, even if that means losing data, also needs to fit into a single bulk update
            z is height
        """
        pass
-   def get_msg_handlers(self):
-       """ Return a dictionary of message types mapped to message handlers that the driver wants to deal with directly
-       """
-       return {}
    def respawn(self):
        """ If the AI's avatar is dead, respawn if possible - if respawning requires a particular amount of time
            this method should block. If the AI's avatar is alive and it is possible to do so, this method should
@@ -141,7 +131,7 @@ class YateBaseDriver(object):
        """
        pass
    def tick(self):
-       """ This method will be called in a loop by YATE, if the game requires regular activity of any kind it should go here.
+       """ This method will be called in a loop by YATE
            If the game requires particular timing for things such as keepalive packets it should be tracked here.
            This method should NOT block using time.sleep or similar
        """

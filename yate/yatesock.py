@@ -143,9 +143,10 @@ class YATESocket:
               if not self.last_pack.has_key(peer):
                  yatelog.warn('YATESock','Peer %s:%s never actually sent us a single packet after connecting' % peer)
                  self.known_peers.discard(peer)
-              if cur_time - self.last_pack[peer] > YATE_KEEPALIVE_TIMEOUT:
-                 yatelog.info('YATESock','Peer %s:%s has timed out, bye' % peer)
-                 self.known_peers.discard(peer)
+              else:
+                 if cur_time - self.last_pack[peer] > YATE_KEEPALIVE_TIMEOUT:
+                    yatelog.info('YATESock','Peer %s:%s has timed out, bye' % peer)
+                    self.known_peers.discard(peer)
    def do_keepalive(self,client_addr):
        """ send keepalive packets to the peer so we don't time out
        """

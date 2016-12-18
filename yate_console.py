@@ -61,7 +61,7 @@ class YATEConsoleApp:
        self.percept_delay = 0
 
        self.disp_func = self.log_display
-       self.client    = yateclient.YATEClient(connect_cb = self.connect_cb, voxel_update_cb=self.voxel_update_cb,avatar_pos_cb=self.avatar_pos_cb)
+       self.client    = yateclient.YATEClient(voxel_update_cb=self.voxel_update_cb,avatar_pos_cb=self.avatar_pos_cb)
        self.running = True
        yatelog.info('yate_console','Starting up')
        self.draw_scr()
@@ -90,13 +90,10 @@ class YATEConsoleApp:
        """ If a voxel is updated within the visual range and on the same level as the avatar, update the display
        """
        vox_pos           = voxel.get_pos()
-       voxmap            = self.client.get_map()
-       if not voxmap.is_visible(vox_pos): return
 
-       avatar_pos        = voxmap.get_avatar_pos()
+       avatar_pos        = self.av_pos
        av_x,av_y,av_z    = avatar_pos
        vox_x,vox_y,vox_z = vox_pos
-
 
        if round(vox_z) != round(av_z): return
 
@@ -106,10 +103,6 @@ class YATEConsoleApp:
           vox_char = voxel_chars[voxel.get_basic_type()]
        self.voxel_win.addstr(vox_y+4,vox_x+4,vox_char,curses.color_pair(VOXEL_COLOR_PAIR+voxel.get_basic_type()))
    def avatar_pos_cb(self,spatial_position):
-       if self.av_pos != (0,0,0):
-          if self.av_pos != spatial_position:
-             self.client.refresh_vis(voxel_pos=self.av_pos)
-          self.av_pos = tuple(spatial_position)
        av_x,av_y,av_z = spatial_position
        self.voxel_win.addstr(av_y+4,av_x+4,'A')
        self.av_pos = spatial_position
@@ -128,8 +121,8 @@ class YATEConsoleApp:
    def do_move(self,key):
        # for now this is quite silly and only works with the mock driver
        if key=='w': vector = ( 0,-1,0)
-       if key=='a': vector = ( 0, 1,0)
-       if key=='s': vector = (-1, 0,0)
+       if key=='a': vector = (-1, 0,0)
+       if key=='s': vector = ( 0, 1,0)
        if key=='d': vector = ( 1, 0,0)
        self.client.move_vector(vector)
 
@@ -161,25 +154,6 @@ class YATEConsoleApp:
              self.draw_scr()
           except Exception,e:
              pass
-   def track_dirty_thread(self):
-       while self.client.is_connected():
-          eventlet.greenthread.sleep(self.percept_delay)
-          if self.client.envmap.is_complete():
-             self.percept_delay = 1.5
-          else:
-             self.percept_delay = 0
-   def perception_thread(self):
-       yatelog.info('yate_console','Perception thread running')
-       self.client.mark_dirty()
-       while self.client.is_connected():
-          try:
-             self.client.refresh_vis()
-          except:
-             yatelog.minor_exception('yate_console','failed during visual update')
-          eventlet.greenthread.sleep(self.percept_delay)
-   def connect_cb(self):
-       self.pool.spawn(self.track_dirty_thread)
-       self.pool.spawn(self.perception_thread)
    def connect(self):
        self.scr.nodelay(0)
        self.scr.addstr(self.y+2,self.x+1,' '*(self.w-2),curses.color_pair(TOPSTATUS))
