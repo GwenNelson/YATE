@@ -3,7 +3,7 @@ import logging
 import traceback
 import curses
 
-logger      = None
+logger      = logging.getLogger('YATE')
 formatter   = None
 loglevel    = logging.INFO
 
@@ -26,7 +26,7 @@ def get_formatter():
 
 def get_curses_logger(curses_win):
     global logger
-    if logger is None:
+    if not logger.handlers:
        logger = logging.getLogger('YATE')
        logger.setLevel(loglevel)
        log_handler = CursesHandler(curses_win)
@@ -37,7 +37,7 @@ def get_curses_logger(curses_win):
 
 def get_logger():
     global logger
-    if logger is None:
+    if not logger.handlers:
        logger = logging.getLogger('YATE')
        logger.setLevel(loglevel)
        log_handler = logging.StreamHandler()
@@ -49,32 +49,32 @@ def info(component,message):
     """ Log general info stuff
     """
     cmp_s = '%10s' % component
-    logger.info('%s: %s',cmp_s,message)
+    get_logger().info('%s: %s',cmp_s,message)
 
 def debug(component,message):
     if loglevel < logging.DEBUG: return
     cmp_s = '%10s' % component
-    logger.debug('%s: %s',cmp_s,message)
+    get_logger().debug('%s: %s',cmp_s,message)
 
 def warn(component,message):
     cmp_s = '%10s' % component
-    logger.warn('%s: %s',cmp_s,message)
+    get_logger().warn('%s: %s',cmp_s,message)
 
 def minor_exception(component,message):
     """ Log an exception, but keep running
     """
     e_str   = traceback.format_exc()
-    logger.error('%s: %s: Exception occurred',component,message)
+    get_logger().error('%s: %s: Exception occurred',component,message)
     for line in e_str.split('\n'):
-        logger.error('%s: %s',component,line)
+        get_logger().error('%s: %s',component,line)
 
 def fatal_exception(component,message):
     e_str   = traceback.format_exc()
-    logger.critical('%s: Critical error occurred: %s',component,message)
+    get_logger().critical('%s: Critical error occurred: %s',component,message)
     for line in e_str.split('\n'):
         if len(line)>1: logger.critical('%s: %s',component,line)
 
-    logger.critical('%s: Terminating',component)
+    get_logger().critical('%s: Terminating',component)
     sys.exit()
 
 

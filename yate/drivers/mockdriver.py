@@ -97,4 +97,4 @@ class MockDriver(base.YateBaseDriver):
        else:
           return base.YateBaseVoxel(spatial_pos=voxel_pos,basic_type=YATE_VOXEL_UNKNOWN) # if outside of the map, the unknown void wherein Azathoth lurks (or something)
 
-driver = MockDriver()
+driver = MockDriver
