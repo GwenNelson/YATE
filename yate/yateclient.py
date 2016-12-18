@@ -67,7 +67,7 @@ class YATEClient:
        """ handle avatar position updates
        """
        self.avatar_pos = msg_params
-       if self.avatar_pos_cb != None: self.avatar_pos_cb(msg_params)
+       if self.avatar_pos_cb != None: self.avatar_pos_cb(self.avatar_pos)
    def handle_connect_ack(self,msg_params,from_addr,msg_id):
        yatelog.info('YATEClient','Successfully connected to server')
        self.ready = True

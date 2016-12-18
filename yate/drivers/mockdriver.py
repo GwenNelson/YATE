@@ -67,15 +67,30 @@ class MockDriver(base.YateBaseDriver):
        new_y = cur_y + vec_y
        new_z = cur_z
        new_vox = self.get_voxel((new_x,new_y,new_z))
+       vox_pos = new_vox.get_pos()
        if new_vox.can_traverse():
           if new_vox.can_destroy():
-             self.destroy_voxel(new_vox)
+             self.destroy_voxel(vox_pos)
           else:
              if new_vox.can_open():
-                self.interact_voxel(new_vox)
+                if not new_vox.is_open(): self.interact_voxel(vox_pos)
           self.spatial_pos = (new_x,new_y,new_z)
    def get_vision_range(self):
        return self.visual_range
+   def destroy_voxel(self,voxel_pos):
+       old_vox = self.get_voxel(voxel_pos)
+       if not old_vox.can_destroy(): return
+       new_vox = base.YateBaseVoxel(spatial_pos=voxel_pos,basic_type=YATE_VOXEL_EMPTY)
+       self.env[voxel_pos] = new_vox
+   def interact_voxel(self,voxel_pos):
+       old_vox = self.get_voxel(voxel_pos)
+       if not old_vox.can_open(): return
+       if old_vox.active_state == YATE_VOXEL_ACTIVE:
+          new_vox = base.YateBaseVoxel(spatial_pos=voxel_pos,basic_type=old_vox.basic_type,specific_type=old_vox.specific_type,active_state=YATE_VOXEL_INACTIVE)
+       elif old_vox.active_state == YATE_VOXEL_INACTIVE:
+          new_vox = base.YateBaseVoxel(spatial_pos=voxel_pos,basic_type=old_vox.basic_type,specific_type=old_vox.specific_type,active_state=YATE_VOXEL_ACTIVE)
+       self.env[voxel_pos] = new_vox
+
    def get_voxel(self,voxel_pos):
        if self.env.has_key(voxel_pos):
           return self.env[voxel_pos]

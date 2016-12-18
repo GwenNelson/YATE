@@ -23,8 +23,8 @@ class YATEServer:
        self.pool              = eventlet.GreenPool(1000)
 
    def handle_request_pos(self,msg_params,from_addr,msg_id):
-       avatar_pos = self.driver.get_pos()
-       self.sock.send_avatar_pos(*avatar_pos,to_addr=from_addr)
+       pos = self.driver.get_pos()
+       self.sock.send_avatar_pos(pos[0],pos[1],pos[2],to_addr=from_addr)
    def handle_request_range(self,msg_params,from_addr,msg_id):
        visual_range = self.driver.get_vision_range()
        self.send_visual_range(*visual_range, to_addr=from_addr)
@@ -41,7 +41,8 @@ class YATEServer:
        self.sock.send_bulk_voxel_update(*bulkdata,to_addr = from_addr)
    def handle_move_vector(self,msg_params,from_addr,msg_id):
        self.driver.move_vector(msg_params)
-       self.sock.send_avatar_pos(self.driver.get_pos(),to_addr=from_addr)
+       pos = self.driver.get_pos()
+       self.sock.send_avatar_pos(pos[0],pos[1],pos[2],to_addr=from_addr)
    def get_port(self):
        return self.sock.get_endpoint()[1]
 

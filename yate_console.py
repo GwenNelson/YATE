@@ -103,7 +103,9 @@ class YATEConsoleApp:
           vox_char = voxel_chars[voxel.get_basic_type()]
        self.voxel_win.addstr(vox_y+4,vox_x+4,vox_char,curses.color_pair(VOXEL_COLOR_PAIR+voxel.get_basic_type()))
    def avatar_pos_cb(self,spatial_position):
-       av_x,av_y,av_z = spatial_position
+       av_x = spatial_position[0]
+       av_y = spatial_position[1]
+       av_z = spatial_position[2]
        self.voxel_win.addstr(av_y+4,av_x+4,'A')
        self.av_pos = spatial_position
        

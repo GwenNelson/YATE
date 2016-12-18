@@ -9,8 +9,6 @@ import time
 
 class YateBaseVoxel:
    """ This class may either be used directly or inherited from and extended for game-specific mechanics etc
-       Instances of this class should be replaced completely, not edited, when the environment changes
-       Basically, this class should always be read only
    """
    def __init__(self,spatial_pos=(64,64,64),basic_type=YATE_VOXEL_EMPTY,specific_type=0,active_state=YATE_VOXEL_INACTIVE,intact_state=YATE_VOXEL_INTACT,from_params=None):
        """ spatial_pos   is obvious
