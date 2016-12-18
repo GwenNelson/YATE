@@ -6,7 +6,9 @@ import re
 
 from chat_styles import code_by_name, code_by_prop
 import types
-#from quarry.utils.errors import ProtocolError
+
+class ProtocolError(Exception):
+   pass
 
 # Python 3 compat
 try:
