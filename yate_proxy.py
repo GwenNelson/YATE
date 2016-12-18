@@ -27,4 +27,4 @@ elif len(sys.argv)>=2:
    except Exception,e:
       yatelog.fatal_exception('YATEServer','Could not start server')
    logger.info('YATEServer: Server running on port %s', server.get_port())
-   while True: eventlet.greenthread.sleep(0)
+   while True: eventlet.greenthread.sleep(10)
