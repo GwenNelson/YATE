@@ -64,18 +64,33 @@ def warn(component,message):
 def minor_exception(component,message):
     """ Log an exception, but keep running
     """
-    e_str   = traceback.format_exc()
-    get_logger().error('%s: %s: Exception occurred',component,message)
+    e_type,e_value,e_traceback = sys.exc_info()
+    e_str  = ''
+    e_str += 'Exception occurred\n'
+    e_str += traceback.format_exception_only(e_type,e_value)[0]
+
+    frames = []
+    tb = e_traceback
+    while tb:
+       frames.append(tb.tb_frame)
+       tb = tb.tb_next
+    frames.reverse()
+    for f in frames:
+        l_vars = ''
+        for k,v in f.f_locals.items():
+            v_str = ''
+            try:
+               v_str = str(v)
+            except:
+               v_str = '<UNPRINTABLE VALUE>'
+            l_vars += '\t%s = %s\n' % (k,v_str)
+        e_str += '%s, line %s in %s\n%s' % (f.f_code.co_filename, f.f_lineno,f.f_code.co_name,l_vars)
     for line in e_str.split('\n'):
-        get_logger().error('%s: %s',component,line)
+        if len(line)>1: get_logger().error('%s: %s',component,line)
 
 def fatal_exception(component,message):
-    e_str   = traceback.format_exc()
-    get_logger().critical('%s: Critical error occurred: %s',component,message)
-    for line in e_str.split('\n'):
-        if len(line)>1: logger.critical('%s: %s',component,line)
-
-    get_logger().critical('%s: Terminating',component)
+    minor_exception(component,message)
+    get_logger().critical('%s: Above exception is critical, terminating',component)
     sys.exit()
 
 
