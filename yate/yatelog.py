@@ -1,6 +1,7 @@
 import sys
 import logging
 import traceback
+import inspect
 import curses
 
 logger      = logging.getLogger('YATE')
@@ -84,7 +85,12 @@ def minor_exception(component,message):
             except:
                v_str = '<UNPRINTABLE VALUE>'
             l_vars += '\t%s = %s\n' % (k,v_str)
-        e_str += '%s, line %s in %s\n%s' % (f.f_code.co_filename, f.f_lineno,f.f_code.co_name,l_vars)
+        source_s = ''
+        source_lines,source_line_no = inspect.getsourcelines(f)
+        for l in source_lines:
+            source_s       += '%s >>> %s\n' % (source_line_no,l)
+            source_line_no += 1
+        e_str += '%s, line %s in %s:\n%s\n%s' % (f.f_code.co_filename, f.f_lineno,f.f_code.co_name, source_s ,l_vars)
     for line in e_str.split('\n'):
         if len(line)>1: get_logger().error('%s: %s',component,line)
 

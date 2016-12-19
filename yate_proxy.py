@@ -28,7 +28,7 @@ params_dict = {'server':args.server,'username':args.username,'password':args.pas
 yatelog.info('yate_proxy','Loaded driver, starting server with driver params: %s' % str(params_dict))
 try:
    driver = drivermod.driver(**params_dict)
-   server = yateserver.YATEServer(drivermod.driver,verbose=args.verbose)
+   server = yateserver.YATEServer(driver,verbose=args.verbose)
 except Exception,e:
    yatelog.fatal_exception('yate_proxy','Could not start server')
 yatelog.info('yate_proxy','Server running on port %s' % server.get_port())
