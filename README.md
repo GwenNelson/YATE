@@ -11,10 +11,8 @@ The system consists of a few parts:
  5. Your AGI: connects to the YATE proxy using a simple UDP-based protocol and does AGI stuff - I call mine MrRobot and it's in this repo
 
 ## To setup for minecraft
-  1. Install the slightly modified SpockBot found in deps/ using "setup.py install"
-  2. Start a minecraft server in offline mode running version 1.8, I also recommend using creative mode at first to avoid having to handle respawns and combat
-  3. Start the YATE proxy by running minecraft_proxy.sh
-  4. Enter a username, password and server IP+Port
-  5. Join the game with a normal minecraft client and find your bot's avatar - it should be standing still
-  6. Start the YATE console, MrRobot or both (see the relevant directories in this repo) and then have fun
+  1. Start a minecraft server in offline mode and ensure it's listening to port 25565 on localhost (you can of course change this if you really need to, but then you need to update the minecraft_proxy.sh script)
+  2. Start the YATE proxy by running minecraft_proxy.sh
+  3. Join the game with a normal minecraft client and find your bot's avatar - it should be standing still
+  4. Start the YATE console, MrRobot or both (see the relevant directories in this repo) and then have fun
 

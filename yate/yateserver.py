@@ -5,13 +5,15 @@ import yatelog
 import yatesock
 import time
 import msgpack
+import logging
 
 import utils # yate utils
 from yateproto import *
 
 class YATEServer:
-   def __init__(self,driver):
+   def __init__(self,driver,verbose=False):
        self.logger   = yatelog.get_logger()
+       if verbose: self.logger.setLevel(logging.DEBUG)
        self.driver   = driver
 
        self.handlers = {MSGTYPE_REQUEST_POS:       self.handle_request_pos,

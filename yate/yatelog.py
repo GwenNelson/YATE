@@ -5,7 +5,7 @@ import curses
 
 logger      = logging.getLogger('YATE')
 formatter   = None
-loglevel    = logging.DEBUG
+loglevel    = logging.INFO
 
 class CursesHandler(logging.StreamHandler):
    def __init__(self,curses_win=None):
@@ -25,9 +25,8 @@ def get_formatter():
     return formatter
 
 def get_curses_logger(curses_win):
-    global logger
+    logger = logging.getLogger('YATE')
     if not logger.handlers:
-       logger = logging.getLogger('YATE')
        logger.setLevel(loglevel)
        log_handler = CursesHandler(curses_win)
        log_handler.setFormatter(get_formatter())
@@ -36,9 +35,8 @@ def get_curses_logger(curses_win):
     return logger
 
 def get_logger():
-    global logger
+    logger = logging.getLogger('YATE')
     if not logger.handlers:
-       logger = logging.getLogger('YATE')
        logger.setLevel(loglevel)
        log_handler = logging.StreamHandler()
        log_handler.setFormatter(get_formatter())
@@ -52,9 +50,12 @@ def info(component,message):
     get_logger().info('%s: %s',cmp_s,message)
 
 def debug(component,message):
-    if loglevel < logging.DEBUG: return
     cmp_s = '%10s' % component
     get_logger().debug('%s: %s',cmp_s,message)
+
+def error(component,message):
+    cmp_s = '%10s' % component
+    get_logger().error('%s: %s',cmp_s,message)
 
 def warn(component,message):
     cmp_s = '%10s' % component

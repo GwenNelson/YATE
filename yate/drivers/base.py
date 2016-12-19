@@ -110,7 +110,7 @@ class YateBaseDriver(object):
    """ This class is the base used for all drivers
        At time of writing the only supported game in YATE is minecraft, so that is the only class inheriting from this one
    """
-   def __init__(self,username=None,password=None,server=None):
+   def __init__(self,username=None,password=None,server=None,verbose=False):
        """ When overriding, the constructor should setup the connection and get into a state where the game is playable
            by the AI's avatar - the username,password and server params are self explanatory and may optionally be ignored
            if doing so is appropriate. If the setup fails, then the constructor should throw an exception
