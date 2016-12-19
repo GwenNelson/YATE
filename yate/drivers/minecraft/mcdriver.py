@@ -37,9 +37,13 @@ class MinecraftDriver(base.YateBaseDriver):
    def handle_player_position_and_look(self,buff):
        """ When this packet comes in, it lets us know where we are
        """
+       if self.av_pos is None: # this is a hack for the first update
+          self.av_pos   = [0.0,0.0,0.0]
+          self.av_pitch = 0.0
+          self.av_yaw   = 0.0
        pos_look = buff.unpack('dddff')
 
-       if self.protocol_version <= 5: # 1.7.x - probably never gonna be used, but what the hell
+       if self.sock.protocol_version <= 5: # 1.7.x - probably never gonna be used, but what the hell
           self.on_ground = buff.unpack('?')
           self.av_pos    = pos_look[0],pos_look[1],pos_look[2]
           self.av_yaw    = pos_look[3]
@@ -59,9 +63,9 @@ class MinecraftDriver(base.YateBaseDriver):
              self.av_pitch += pos_look[4] # most musicians do fine with relative pitch, i do when jamming on guitar
           else:
              self.av_pitch  = pos_look[4]
-       if self.protocol_version > 47: # 1.9.x+ sends teleports, so we need to confirm them
+       if self.sock.protocol_version > 47: # 1.9.x+ sends teleports, so we need to confirm them
           teleport_id = buff.unpack_varint()
-          self.send_teleport_confirm(buffer.Buffer.pack_varint(teleport_id))
+          self.sock.send_teleport_confirm(buffer.Buffer.pack_varint(teleport_id))
 
    def get_rot(self):
        """ We calculate this from the avatar pitch and yaw stuff
@@ -98,11 +102,11 @@ class MinecraftDriver(base.YateBaseDriver):
        cur_time = time.time()
        if (cur_time-self.last_tick) >= self.tick_delay:
           self.minecraft_client_tick()
-          self.last_tick = time.time()
+          self.last_tick = cur_time
        if (cur_time - self.last_full_update) >= 1.0:
           self.full_update()
-          self.last_full_update = time.time()
-       eventlet.greenthread.sleep(self.tick_delay)
+          self.last_full_update = cur_time
+       eventlet.greenthread.sleep(self.tick_delay/2.0) # we actually want to check whether to tick
    def handle_login_success(self,buff):
        self.avatar_uuid = buff.unpack_string()
        self.avatar_name = buff.unpack_string()

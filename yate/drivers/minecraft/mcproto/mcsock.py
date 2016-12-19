@@ -124,6 +124,7 @@ class MCSocket:
           eventlet.greenthread.sleep(0)
           try:
              self.tcp_sock.sendall(outdata)
+             yatelog.debug('MCSock','Transmitted a packet')
           except:
              yatelog.fatal_exception('MCSock','Could not transmit to the server')
 
