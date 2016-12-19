@@ -34,7 +34,7 @@ class MinecraftDriver(base.YateBaseDriver):
        """ This is called 20 times per second and does per-tick things
        """
        self.sock.send_player(buffer.Buffer.pack('?', True)) # send a Player packet every tick
-   def handle_player_position_and_look(self):
+   def handle_player_position_and_look(self,buff):
        """ When this packet comes in, it lets us know where we are
        """
        pos_look = buff.unpack('dddff')
@@ -99,8 +99,10 @@ class MinecraftDriver(base.YateBaseDriver):
        if (cur_time-self.last_tick) >= self.tick_delay:
           self.minecraft_client_tick()
           self.last_tick = time.time()
-       if (cur_time - last_full_update) >= 1.0:
+       if (cur_time - self.last_full_update) >= 1.0:
           self.full_update()
+          self.last_full_update = time.time()
+       eventlet.greenthread.sleep(self.tick_delay)
    def handle_login_success(self,buff):
        self.avatar_uuid = buff.unpack_string()
        self.avatar_name = buff.unpack_string()
