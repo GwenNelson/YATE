@@ -84,6 +84,7 @@ def minor_exception(component,message):
                v_str = str(v)
             except:
                v_str = '<UNPRINTABLE VALUE>'
+            if len(v_str)>=20: v_str = '<MASSIVE STRING>'
             l_vars += '\t%s = %s\n' % (k,v_str)
         source_s = ''
         source_lines,source_line_no = inspect.getsourcelines(f)

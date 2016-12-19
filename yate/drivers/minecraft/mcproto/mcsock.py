@@ -62,6 +62,7 @@ class MCSocket:
        self.compression_enabled   = False
 
        self.handlers = {'login_set_compression':self.handle_login_set_compression,
+                        'handle_keep_alive':    self.handle_keep_alive,
                         'set_compression':      self.handle_set_compression}
        self.handlers.update(handlers)
        self.cipher   = crypto.Cipher()
@@ -81,6 +82,9 @@ class MCSocket:
           self.compression_enabled = True
           yatelog.debug('MCSock','Compression enabled')
        self.compression_threshold = threshold
+   def handle_keep_alive(self,buff):
+       keep_alive_id = buff.unpack_varint()
+       self.send_keep_alive(buffer.Buffer.pack_varint(keep_alive_id))
    def handle_login_set_compression(self,buff):
        new_threshold = buff.unpack_varint()
        self.set_compression(new_threshold)

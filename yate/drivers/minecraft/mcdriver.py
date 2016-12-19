@@ -6,6 +6,7 @@ import time
 
 from mcproto import mcsock
 from mcproto import buffer
+from mcproto import smpmap
 
 class MinecraftDriver(base.YateBaseDriver):
    def __init__(self,username=None,password=None,server='127.0.0.1:25565'):
@@ -13,13 +14,16 @@ class MinecraftDriver(base.YateBaseDriver):
        self.username    = username
        self.password    = password
        self.avatar_uuid = None
+       self.avatar_eid  = 0
        self.avatar_name = username # not always the same, just usually
        server_ip,server_port = server.split(':')
        self.server_addr = (server_ip,int(server_port))
        yatelog.info('minecraft','Minecraft driver starting up')
    
        pack_handlers = {'login_success':           self.handle_login_success,
-                        'player_position_and_look':self.handle_player_position_and_look}
+                        'join_game':               self.handle_join_game,
+                        'player_position_and_look':self.handle_player_position_and_look,
+                        'chunk_data':              self.handle_chunk_data}
 
        self.sock = mcsock.MCSocket(self.server_addr,handlers=pack_handlers,display_name=username)
        self.sock.switch_mode(mcsock.protocol_modes['login'])
@@ -30,10 +34,33 @@ class MinecraftDriver(base.YateBaseDriver):
        self.av_pitch         = None
        self.av_yaw           = None
        self.on_ground        = True
+       self.env              = {} # voxels galore, in sane format
+       self.world            = smpmap.Dimension(smpmap.DIMENSION_OVERWORLD)
+       while self.avatar_uuid is None: eventlet.greenthread.sleep(self.tick_delay) # don't return until we're spawned
+   def get_vision_range(self):
+       """ Minecraft chunk sections are 16*16*16 - this would probably be the ideal if it could fit into a single bulk voxel update
+           Sadly it can't, so we return half of that on the (X,Y) plane and a quarter on the Z axis or 8*8*4
+       """
+       return (8,8,4)
    def minecraft_client_tick(self):
        """ This is called 20 times per second and does per-tick things
        """
        self.sock.send_player(buffer.Buffer.pack('?', True)) # send a Player packet every tick
+   def handle_chunk_data(self,buff):
+       """ We get some voxel data here, yay!
+       """
+       data = {}
+       data['chunk_x']        = buff.unpack_int()
+       data['chunk_z']        = buff.unpack_int()
+       data['continuous']     = buff.unpack('?')
+       data['primary_bitmap'] = buff.unpack_varint()
+       data['data_size']      = buff.unpack_varint()
+       data['data']           = buff.read(data['data_size'])
+       self.world.unpack_column(data)
+
+   def handle_join_game(self,buff):
+       self.avatar_eid = buff.unpack_int()
+       yatelog.info('minecraft','We are entity ID %s' % self.avatar_eid)
    def handle_player_position_and_look(self,buff):
        """ When this packet comes in, it lets us know where we are
        """
@@ -62,7 +89,7 @@ class MinecraftDriver(base.YateBaseDriver):
           if flags & (1 << 4): # check for absolute pitch - which would be a cool thing to have in the cool band
              self.av_pitch += pos_look[4] # most musicians do fine with relative pitch, i do when jamming on guitar
           else:
-             self.av_pitch  = pos_look[4]
+             self.av_pitch  = pos_look[4] # absolute pitch is better in music, and kinda neutral in 3D game network protocols
        if self.sock.protocol_version > 47: # 1.9.x+ sends teleports, so we need to confirm them
           teleport_id = buff.unpack_varint()
           self.sock.send_teleport_confirm(buffer.Buffer.pack_varint(teleport_id))
@@ -106,7 +133,11 @@ class MinecraftDriver(base.YateBaseDriver):
        if (cur_time - self.last_full_update) >= 1.0:
           self.full_update()
           self.last_full_update = cur_time
-       eventlet.greenthread.sleep(self.tick_delay/2.0) # we actually want to check whether to tick
+       end_time = time.time()
+       if end_time-cur_time <= self.tick_delay:
+          eventlet.greenthread.sleep(self.tick_delay-end_time-cur_time) # this should make updates very slightly mildly smoother, but only a little bit
+       else:
+          yatelog.warn('minecraft','tick took longer than the standard tick delay - this usually indicates you need a better CPU or better coding skills')
    def handle_login_success(self,buff):
        self.avatar_uuid = buff.unpack_string()
        self.avatar_name = buff.unpack_string()

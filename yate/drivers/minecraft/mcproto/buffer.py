@@ -25,6 +25,9 @@ class Buffer(object):
     buff = b""
     pos = 0
 
+    def __init__(self,data=None):
+        if data != None: self.add(data)
+    
     def __len__(self):
         return len(self.buff) - self.pos
 
@@ -97,6 +100,12 @@ class Buffer(object):
         length = self.unpack_varint(max_bits=16)
         text = self.read(length).decode("utf-8")
         return text
+
+    def unpack_int(self):
+        """
+        Unpack a standard 32-bit integer from the buffer (Int type in minecraft)
+        """
+        return self.unpack('i')
 
     def unpack_json(self):
         """
