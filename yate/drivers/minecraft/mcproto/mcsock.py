@@ -54,13 +54,15 @@ class MCSocket:
            display_name is what it sounds like
            despite this thing being in eventlet, it's pretty much blocking - because notch owes me now, also it's a TCP socket and there's probably ordering issues
        """
-       self.endpoint         = endpoint
-       self.protocol_version = protocol_version
-       self.protocol_mode    = protocol_mode
-       self.display_name     = display_name
-       self.compression_enabled = False
+       self.endpoint              = endpoint
+       self.protocol_version      = protocol_version
+       self.protocol_mode         = protocol_mode
+       self.display_name          = display_name
+       self.compression_threshold = 0
+       self.compression_enabled   = False
 
-       self.handlers = {}
+       self.handlers = {'login_set_compression':self.handle_login_set_compression,
+                        'set_compression':      self.handle_set_compression}
        self.handlers.update(handlers)
        self.cipher   = crypto.Cipher()
        self.pool     = eventlet.GreenPool(1000)
@@ -72,6 +74,19 @@ class MCSocket:
               setattr(self,'send_%s' % k[3],MCSendMethod(k[3],self))
        if endpoint != None:
           self.connect_to(endpoint)
+   def set_compression(self,threshold):
+       """ Used internally for compression packet handlers
+       """
+       if not self.compression_enabled:
+          self.compression_enabled = True
+          yatelog.debug('MCSock','Compression enabled')
+       self.compression_threshold = threshold
+   def handle_login_set_compression(self,buff):
+       new_threshold = buff.unpack_varint()
+       self.set_compression(new_threshold)
+   def handle_set_compression(self,buff):
+       new_threshold = buff.unpack_varint()
+       self.set_compression(new_threshold)
    def switch_mode(self,new_mode=protocol_modes['login']):
        """ Use this to switch protocol mode after a connection is established
            new_mode is the integer describing the new mode to switch to (default is login)
@@ -124,6 +139,12 @@ class MCSocket:
        packbody = self.recv_buff.read(packlen)
        pack_buff = buffer.Buffer()
        pack_buff.add(packbody)
+       if self.compression_enabled:
+          uncompressed_len = pack_buff.unpack_varint()
+          if uncompressed_len > 0:
+             data = zlib.decompress(pack_buff.read())
+             pack_buff = buffer.Buffer()
+             pack_buff.add(data)
        try:
           ident = pack_buff.unpack_varint()
           k     = (self.protocol_version,
@@ -134,7 +155,7 @@ class MCSocket:
           if packets.packet_names.has_key(k):
              if self.handlers.has_key(packets.packet_names[k]):
                 try:
-                   self.handlers[k](pack_buff)
+                   self.handlers[packets.packet_names[k]](pack_buff)
                 except:
                    yatelog.minor_exception('MCSock','Error running packet handler')
              else:
@@ -150,7 +171,10 @@ class MCSocket:
        """
        rawpack = buffer.Buffer.pack_varint(ident) + data
        if self.compression_enabled: #TODO implement this
-          pass
+          if len(rawpack) >= self.compression_threshold:
+             rawpack = buffer.Buffer.pack_varint(len(rawpack)) + zlib_compress(rawpack)
+          else:
+             rawpack = buffer.Buffer.pack_varint(0) + rawpack
 
        if self.protocol_mode <3:
           max_bits = 21 # all modes but 'play'
