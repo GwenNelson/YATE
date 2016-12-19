@@ -23,7 +23,15 @@ class YATEServer:
                         MSGTYPE_MOVE_VECTOR:   self.handle_move_vector}
        self.sock              = yatesock.YATESocket(handlers=self.handlers)
        self.pool              = eventlet.GreenPool(1000)
+       self.pool.spawn(self.do_ticks)
 
+   def do_ticks(self):
+       while True:
+          try:
+             d = self.driver
+             d.tick()
+          except:
+             yatelog.minor_exception('YATEServer','Failed driver tick')
    def handle_request_pos(self,msg_params,from_addr,msg_id):
        pos = self.driver.get_pos()
        self.sock.send_avatar_pos(pos[0],pos[1],pos[2],to_addr=from_addr)

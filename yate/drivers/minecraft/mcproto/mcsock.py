@@ -114,8 +114,19 @@ class MCSocket:
        self.recv_buff           = buffer.Buffer()
        self.compression_enabled = False
        self.protocol_mode       = 0 # did you really think it made sense to set this to anything else you maniac?
+       self.send_q              = eventlet.queue.LightQueue(0)
        self.ready               = True
        self.pool.spawn_n(self.read_thread)
+       self.pool.spawn_n(self.send_thread)
+   def send_thread(self):
+       while True:
+          outdata = self.send_q.get()
+          eventlet.greenthread.sleep(0)
+          try:
+             self.tcp_sock.sendall(outdata)
+          except:
+             yatelog.fatal_exception('MCSock','Could not transmit to the server')
+
    def read_thread(self):
        while True:
           indata = self.tcp_sock.recv(1024)
@@ -128,7 +139,7 @@ class MCSocket:
              self.recv_buff.restore()
    def readpack(self):
        """ Reads a single packet from the socket
-           Used internally
+           Used internally, must NOT be called from anywhere but read_thread lest bad things happen
        """
        if self.protocol_mode < 3:
           max_bits = 21
@@ -168,13 +179,16 @@ class MCSocket:
        """ Used to send raw packets
             ident is the ID from packets.packet_idents
             data is the pre-serialised contents of the packet
+           To avoid race conditions, the actual transmission takes place in send_thread - which makes it possible to sprinkle a few sleeps in here and boost performance mildly
        """
        rawpack = buffer.Buffer.pack_varint(ident) + data
-       if self.compression_enabled: #TODO implement this
+       if self.compression_enabled:
           if len(rawpack) >= self.compression_threshold:
              rawpack = buffer.Buffer.pack_varint(len(rawpack)) + zlib_compress(rawpack)
           else:
              rawpack = buffer.Buffer.pack_varint(0) + rawpack
+
+       eventlet.greenthread.sleep(0)
 
        if self.protocol_mode <3:
           max_bits = 21 # all modes but 'play'
@@ -184,6 +198,8 @@ class MCSocket:
        # prepend length
        rawpack = buffer.Buffer.pack_varint(len(rawpack), max_bits=max_bits) + rawpack
        
+       eventlet.greenthread.sleep(0)
+       
        # encryption
        crypted_pack = self.cipher.encrypt(rawpack)
-       self.tcp_sock.sendall(crypted_pack)
+       self.send_q.put(crypted_pack)

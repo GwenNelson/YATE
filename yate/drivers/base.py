@@ -131,7 +131,11 @@ class YateBaseDriver(object):
    def tick(self):
        """ This method will be called in a loop by YATE
            If the game requires particular timing for things such as keepalive packets it should be tracked here.
-           This method should NOT block using time.sleep or similar
+           This method should NOT block using time.sleep or similar, if precise timing is needed then eventlet's sleep can be used to implement it
+       """
+       pass
+   def get_rot(self):
+       """ Should return a tuple representing the avatar's rotation in 3 spatial axis, in degrees - these values should be clamped to within 0-360 for obvious reasons
        """
        pass
    def get_pos(self):
