@@ -14,10 +14,18 @@ parser.add_argument('-v','--verbose',action='store_true',help='Verbose mode: set
 parser.add_argument('-s','--server',type=str,help='The game server to tell the driver to connect to',default=None)
 parser.add_argument('-u','--username',type=str,help='The username to pass to the driver',default='YATEBot')
 parser.add_argument('-p','--password',type=str,help='The password to pass to the driver',default=None)
+parser.add_argument('--all-fatal',action='store_true',help='All warnings are fatal: dies on the first warning')
+parser.add_argument('--no-minor',action='store_true',help='No such thing as minor exceptions: all exceptions are critical') 
 args = parser.parse_args()
 
 if args.verbose:
    logger.setLevel(logging.DEBUG)
+
+if args.all_fatal:
+   logger.all_fatal = True
+
+if args.no_minor:
+   logger.no_minor = True
 
 yatelog.info('yate_proxy', 'Trying to load driver: %s' % args.driver)
 try:

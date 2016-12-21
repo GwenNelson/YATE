@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 import traceback
@@ -33,6 +34,8 @@ def get_curses_logger(curses_win):
        log_handler.setFormatter(get_formatter())
        logger.curses_win = curses_win
        logger.addHandler(log_handler)
+       logger.all_fatal = False
+       logger.no_minor  = False
     return logger
 
 def get_logger():
@@ -42,6 +45,8 @@ def get_logger():
        log_handler = logging.StreamHandler()
        log_handler.setFormatter(get_formatter())
        logger.addHandler(log_handler)
+       logger.all_fatal = False
+       logger.no_minor  = False
     return logger
 
 def info(component,message):
@@ -61,6 +66,9 @@ def error(component,message):
 def warn(component,message):
     cmp_s = '%10s' % component
     get_logger().warn('%s: %s',cmp_s,message)
+    if get_logger().all_fatal:
+       get_logger().critical('%s: Always fatal mode is on, terminating',component)
+       os._exit(1)
 
 def minor_exception(component,message):
     """ Log an exception, but keep running
@@ -97,10 +105,13 @@ def minor_exception(component,message):
     for line in e_str.split('\n'):
         if len(line)>2:
            get_logger().error('%s: %s',component,line)
+    if get_logger().no_minor:
+       get_logger().critical('%s: No minor exceptions, terminating', component)
+       os._exit(1)
 
 def fatal_exception(component,message):
     minor_exception(component,message)
     get_logger().critical('%s: Above exception is critical, terminating',component)
-    sys.exit()
+    os._exit(1)
 
 

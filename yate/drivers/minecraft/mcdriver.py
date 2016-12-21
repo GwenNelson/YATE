@@ -8,6 +8,8 @@ from mcproto import mcsock
 from mcproto import buffer
 from mcproto import smpmap
 
+MC_OVERWORLD = 1
+
 class MinecraftDriver(base.YateBaseDriver):
    def __init__(self,username=None,password=None,server='127.0.0.1:25565'):
        super(MinecraftDriver,self).__init__(username=username,password=password,server=server)
@@ -34,8 +36,8 @@ class MinecraftDriver(base.YateBaseDriver):
        self.av_pitch         = None
        self.av_yaw           = None
        self.on_ground        = True
-       self.env              = {} # voxels galore, in sane format
-       self.world            = smpmap.Dimension(smpmap.DIMENSION_OVERWORLD)
+       self.dimension        = MC_OVERWORLD
+       self.env              = {} # voxels galore, in sane format for coordinates (x,y,z) but values are minecraft pallete entry indices
        while self.avatar_uuid is None: eventlet.greenthread.sleep(self.tick_delay) # don't return until we're spawned
    def get_vision_range(self):
        """ Minecraft chunk sections are 16*16*16 - this would probably be the ideal if it could fit into a single bulk voxel update
@@ -49,15 +51,48 @@ class MinecraftDriver(base.YateBaseDriver):
    def handle_chunk_data(self,buff):
        """ We get some voxel data here, yay!
        """
-       data = {}
-       data['chunk_x']        = buff.unpack_int()
-       data['chunk_z']        = buff.unpack_int()
-       data['continuous']     = buff.unpack('?')
-       data['primary_bitmap'] = buff.unpack_varint()
-       data['data_size']      = buff.unpack_varint()
-       data['data']           = buff.read(data['data_size'])
-       self.world.unpack_column(data)
-
+       chunk_x        = buff.unpack_int()
+       chunk_z        = buff.unpack_int()
+       continuous     = buff.unpack('?')
+       primary_bitmap = buff.unpack_varint()
+       data_size      = buff.unpack_varint()
+       for chunk_y in xrange(15):
+           chunk_blocks = []
+           if primary_bitmap & (1 << chunk_y):
+              bits_per_block = buff.unpack('B')
+              pal_length     = buff.unpack_varint() # pallette length
+              pal_data       = []
+              if pal_length > 0:
+                 for i in xrange(pal_length):
+                     pal_data.append(buff.unpack_varint())
+              data_array_len = buff.unpack_varint()
+              data_array = []
+              for i in xrange(data_array_len):
+                  data_array.append(buff.unpack_long())
+              max_val = (1 << bits_per_block) - 1
+              for i in xrange(4096):
+                  start_long   = (i * bits_per_block)
+                  start_offset = (i * bits_per_block) % 64
+                  end_long     = ((i + 1) * bits_per_block - 1)
+                  if start_long == end_long:
+                     block = (data_array[start_long] >> start_offset) & max_val
+                  else:
+                     end_offset = 64 - start_offset
+                     block = (data_array[start_long] >> start_offset | data_array[end_long] << end_offset) & max_val
+                  if pal_length >0: block = pal_data[block]
+              chunk_blocks.append(block)
+              lightcrap = buff.read(2048) # we just don't care about the lighting at all but still gotta read it
+              if self.dimension==MC_OVERWORLD: lightcrap = buff.read(2048)
+           for block_x in xrange(16):
+               for block_y in xrange(16):
+                   for block_z in xrange(16):
+                       sane_x = block_x
+                       sane_y = block_z
+                       sane_z = block_y
+                       total_block_x = block_x + (chunk_x*16)
+                       total_block_y = block_y + (chunk_y*16)
+                       total_block_z = block_z + (chunk_z*16)
+                       self.env[(sane_x,sane_y,sane_z)] = blocks[block_x + ((block_y*16)+block_z) + 16]
    def handle_join_game(self,buff):
        self.avatar_eid = buff.unpack_int()
        yatelog.info('minecraft','We are entity ID %s' % self.avatar_eid)

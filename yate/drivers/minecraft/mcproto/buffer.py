@@ -101,6 +101,11 @@ class Buffer(object):
         text = self.read(length).decode("utf-8")
         return text
 
+    def unpack_long(self):
+        """
+        Unpack a long int (64-bit integer)
+        """
+        return self.unpack('Q')
     def unpack_int(self):
         """
         Unpack a standard 32-bit integer from the buffer (Int type in minecraft)
