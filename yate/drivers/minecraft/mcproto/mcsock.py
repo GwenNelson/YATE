@@ -167,17 +167,16 @@ class MCSocket:
                    protocol_modes[self.protocol_mode],
                    'downstream',
                     ident)
-          yatelog.debug('MCSock','Trying to receive %s' % str(k))
           if packets.packet_names.has_key(k):
              if self.handlers.has_key(packets.packet_names[k]):
                 try:
-                   self.handlers[packets.packet_names[k]](pack_buff)
+                   self.pool.spawn(self.handlers[packets.packet_names[k]],pack_buff)
                 except:
                    yatelog.minor_exception('MCSock','Error running packet handler')
              else:
                 yatelog.warn('MCSock','Received unhandled packet: %s' % packets.packet_names[k])
           else:
-             yatelog.error('MCSock','Unknown packet received')
+             yatelog.error('MCSock','Unknown packet received: %s' % str(k))
        except:
           yatelog.minor_exception('MCSock','Failed decoding received packet')
    def sendraw(self,ident,data=b""):

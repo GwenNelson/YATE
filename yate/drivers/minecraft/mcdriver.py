@@ -38,7 +38,9 @@ class MinecraftDriver(base.YateBaseDriver):
        self.on_ground        = True
        self.dimension        = MC_OVERWORLD
        self.env              = {} # voxels galore, in sane format for coordinates (x,y,z) but values are minecraft pallete entry indices
-       while self.avatar_uuid is None: eventlet.greenthread.sleep(self.tick_delay) # don't return until we're spawned
+       while self.avatar_uuid is None:
+          eventlet.greenthread.sleep(self.tick_delay) # don't return until we're spawned but still run tick handler in a speedy manner
+          self.tick()
    def get_vision_range(self):
        """ Minecraft chunk sections are 16*16*16 - this would probably be the ideal if it could fit into a single bulk voxel update
            Sadly it can't, so we return half of that on the (X,Y) plane and a quarter on the Z axis or 8*8*4
@@ -53,11 +55,12 @@ class MinecraftDriver(base.YateBaseDriver):
        """
        chunk_x        = buff.unpack_int()
        chunk_z        = buff.unpack_int()
-       yatelog.info('minecraft','Chunk update at (%s,%s)' % (chunk_x,chunk_z))
+       yatelog.debug('minecraft','Chunk update at (%s,%s)' % (chunk_x,chunk_z))
        continuous     = buff.unpack('?')
        primary_bitmap = buff.unpack_varint()
        data_size      = buff.unpack_varint()
        for chunk_y in xrange(15):
+           eventlet.greenthread.sleep(0)
            chunk_blocks = []
            bits_per_block = 0
            pal_length     = 0
@@ -71,13 +74,16 @@ class MinecraftDriver(base.YateBaseDriver):
               pal_data       = []
               if pal_length > 0:
                  for i in xrange(pal_length):
+                     eventlet.greenthread.sleep(0)
                      pal_data.append(buff.unpack_varint())
               data_array_len = buff.unpack_varint()
               data_array = []
               for i in xrange(data_array_len):
+                  eventlet.greenthread.sleep(0)
                   data_array.append(buff.unpack_long())
               max_val = (1 << bits_per_block) - 1
               for i in xrange(data_array_len):
+                  eventlet.greenthread.sleep(0)
                   start_long   = (i * bits_per_block)
                   start_offset = (i * bits_per_block) % 64
                   end_long     = ((i + 1) * bits_per_block - 1)
@@ -98,6 +104,7 @@ class MinecraftDriver(base.YateBaseDriver):
               for block_x in xrange(16):
                   for block_z in xrange(16):
                       for block_y in xrange(16):
+                          eventlet.greenthread.sleep(0)
                           if block_offset < 256:
                              total_block_x = block_x + chunk_x
                              total_block_y = block_y + (chunk_y*16)
@@ -176,6 +183,7 @@ class MinecraftDriver(base.YateBaseDriver):
             True))
    def tick(self):
        cur_time = time.time()
+       if not (self.sock.protocol_mode == mcsock.protocol_modes['play']): return
        if (cur_time-self.last_tick) >= self.tick_delay:
           self.minecraft_client_tick()
           self.last_tick = cur_time
