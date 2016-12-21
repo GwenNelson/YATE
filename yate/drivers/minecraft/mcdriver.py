@@ -82,15 +82,15 @@ class MinecraftDriver(base.YateBaseDriver):
                   start_offset = (i * bits_per_block) % 64
                   end_long     = ((i + 1) * bits_per_block - 1)
                   if start_long == end_long:
-                     block = (data_array[start_long/8] >> start_offset) & max_val
+                     block = (data_array[start_long/64] >> start_offset) & max_val
                   else:
                      end_offset = 64 - start_offset
-                     block = (data_array[start_long/8] >> start_offset | data_array[end_long/8] << end_offset) & max_val
+                     block = (data_array[start_long/64] >> start_offset | data_array[end_long/64] << end_offset) & max_val
                   if pal_length >0:
                      if block > pal_length:
                         yatelog.warn('minecraft','Got a block outside of the chunk pallette, block ID is %s, pal length is %s' % (block,pal_length))
                      else:
-                        block = pal_data[block-1]
+                        block = pal_data[block]
                   chunk_blocks.append(block)
               lightcrap = buff.read(2048) # we just don't care about the lighting at all but still gotta read it
               if self.dimension==MC_OVERWORLD: lightcrap = buff.read(2048)
