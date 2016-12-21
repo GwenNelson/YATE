@@ -53,13 +53,20 @@ class MinecraftDriver(base.YateBaseDriver):
        """
        chunk_x        = buff.unpack_int()
        chunk_z        = buff.unpack_int()
+       yatelog.info('minecraft','Chunk update at (%s,%s)' % (chunk_x,chunk_z))
        continuous     = buff.unpack('?')
        primary_bitmap = buff.unpack_varint()
        data_size      = buff.unpack_varint()
        for chunk_y in xrange(15):
            chunk_blocks = []
+           bits_per_block = 0
+           pal_length     = 0
+           pal_data       = []
            if primary_bitmap & (1 << chunk_y):
               bits_per_block = buff.unpack('B')
+
+              if bits_per_block < 4: bits_per_block = 4
+              if bits_per_block > 8: bits_per_block = 13
               pal_length     = buff.unpack_varint() # pallette length
               pal_data       = []
               if pal_length > 0:
@@ -70,29 +77,36 @@ class MinecraftDriver(base.YateBaseDriver):
               for i in xrange(data_array_len):
                   data_array.append(buff.unpack_long())
               max_val = (1 << bits_per_block) - 1
-              for i in xrange(4096):
+              for i in xrange(data_array_len):
                   start_long   = (i * bits_per_block)
                   start_offset = (i * bits_per_block) % 64
                   end_long     = ((i + 1) * bits_per_block - 1)
                   if start_long == end_long:
-                     block = (data_array[start_long] >> start_offset) & max_val
+                     block = (data_array[start_long/8] >> start_offset) & max_val
                   else:
                      end_offset = 64 - start_offset
-                     block = (data_array[start_long] >> start_offset | data_array[end_long] << end_offset) & max_val
-                  if pal_length >0: block = pal_data[block]
-              chunk_blocks.append(block)
+                     block = (data_array[start_long/8] >> start_offset | data_array[end_long/8] << end_offset) & max_val
+                  if pal_length >0:
+                     if block > pal_length:
+                        yatelog.warn('minecraft','Got a block outside of the chunk pallette, block ID is %s, pal length is %s' % (block,pal_length))
+                     else:
+                        block = pal_data[block-1]
+                  chunk_blocks.append(block)
               lightcrap = buff.read(2048) # we just don't care about the lighting at all but still gotta read it
               if self.dimension==MC_OVERWORLD: lightcrap = buff.read(2048)
-           for block_x in xrange(16):
-               for block_y in xrange(16):
-                   for block_z in xrange(16):
-                       sane_x = block_x
-                       sane_y = block_z
-                       sane_z = block_y
-                       total_block_x = block_x + (chunk_x*16)
-                       total_block_y = block_y + (chunk_y*16)
-                       total_block_z = block_z + (chunk_z*16)
-                       self.env[(sane_x,sane_y,sane_z)] = blocks[block_x + ((block_y*16)+block_z) + 16]
+              block_offset = 0
+              for block_x in xrange(16):
+                  for block_z in xrange(16):
+                      for block_y in xrange(16):
+                          if block_offset < 256:
+                             total_block_x = block_x + chunk_x
+                             total_block_y = block_y + (chunk_y*16)
+                             total_block_z = block_z + chunk_z
+                             sane_x = total_block_x
+                             sane_y = total_block_z
+                             sane_z = total_block_y
+                             self.env[(sane_x,sane_y,sane_z)] = chunk_blocks[block_offset]
+                             block_offset += 1
    def handle_join_game(self,buff):
        self.avatar_eid = buff.unpack_int()
        yatelog.info('minecraft','We are entity ID %s' % self.avatar_eid)
