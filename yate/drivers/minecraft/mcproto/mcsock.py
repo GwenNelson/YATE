@@ -132,6 +132,13 @@ class MCSocket:
           except:
              yatelog.fatal_exception('MCSock','Could not transmit to the server')
 
+   def handler_wrapper(self,name,handler,buff):
+       """ A wrapper for doing async handlers while still tracking exceptions in yatelog
+       """
+       try:
+          handler(buff)
+       except:
+          yatelog.minor_exception('MCSock','Error running handler for %s' % name)
    def read_thread(self):
        while True:
           indata = self.tcp_sock.recv(1024)
@@ -140,11 +147,13 @@ class MCSocket:
           self.recv_buff.save()
           try:
              self.readpack()
+             eventlet.greenthread.sleep(0)
           except buffer.BufferUnderrun:
              self.recv_buff.restore()
    def readpack(self):
        """ Reads a single packet from the socket
            Used internally, must NOT be called from anywhere but read_thread lest bad things happen
+           After reading the packet, if a handler is registered then we throw it to that handler in a greenlet
        """
        if self.protocol_mode < 3:
           max_bits = 21
@@ -170,9 +179,9 @@ class MCSocket:
           if packets.packet_names.has_key(k):
              if self.handlers.has_key(packets.packet_names[k]):
                 try:
-                   self.pool.spawn(self.handlers[packets.packet_names[k]],pack_buff)
+                   self.pool.spawn_n(self.handler_wrapper,packets.packet_names[k],self.handlers[packets.packet_names[k]],pack_buff)
                 except:
-                   yatelog.minor_exception('MCSock','Error running packet handler')
+                   yatelog.minor_exception('MCSock','Error scheduling packet handler')
              else:
                 yatelog.warn('MCSock','Received unhandled packet: %s' % packets.packet_names[k])
           else:
