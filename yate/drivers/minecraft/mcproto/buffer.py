@@ -246,6 +246,13 @@ class Buffer(object):
         return cls.pack_varint(len(text), max_bits=16) + text
 
     @classmethod
+    def pack_byte(cls, b):
+        """
+        Pack a single byte
+        """
+        return cls.pack('B',b)
+
+    @classmethod
     def pack_json(cls, obj):
         """
         Serialize an object to JSON and pack it to a Minecraft string.

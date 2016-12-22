@@ -115,7 +115,6 @@ class YateBaseDriver(object):
            by the AI's avatar - the username,password and server params are self explanatory and may optionally be ignored
            if doing so is appropriate. If the setup fails, then the constructor should throw an exception
        """
-       self.last_change = time.time()
    def get_vision_range(self):
        """ Returns an (x,y,z) tuple representing how many voxels can be perceived by the in-game avatar
            This must always be an even number on each axis, even if that means losing data, also needs to fit into a single bulk update

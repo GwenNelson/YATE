@@ -1,6 +1,14 @@
 """ This file contains any misc utility functions that don't belong anywhere else
 """
 
+def round_vector(v):
+    """ Rounds a 3D vector into integers
+    """
+    x = int(round(v[0]))
+    y = int(round(v[1]))
+    z = int(round(v[2]))
+    return (x,y,z)
+
 def calc_range(center,size):
     """ Calculates the co-ordinates that lie within the range defined by the parameters
          center is the location of the center of the range (usually an avatar)
@@ -21,6 +29,8 @@ def calc_range(center,size):
 def iter_within(start,end):
     """ Iterates through every point in a 3D space - yields (x,y,z) tuples
     """
+    start = round_vector(start)
+    end   = round_vector(end)
     for x in xrange(start[0],end[0],1):
         for y in xrange(start[1],end[1],1):
             for z in xrange(start[2],end[2],1):

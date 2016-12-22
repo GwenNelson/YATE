@@ -1,12 +1,15 @@
 import eventlet
 eventlet.monkey_patch()
 import base
+import utils
 import yatelog
 import time
 
+from yateproto import *
 from mcproto import mcsock
 from mcproto import buffer
-from mcproto import smpmap
+
+import burger_data
 
 MC_OVERWORLD = 1
 
@@ -37,10 +40,59 @@ class MinecraftDriver(base.YateBaseDriver):
        self.av_yaw           = None
        self.on_ground        = True
        self.dimension        = MC_OVERWORLD
+       self.chunk_data       = {} # maps (x,z) (minecraft format) to chunk data for lazy evaluation
        self.env              = {} # voxels galore, in sane format for coordinates (x,y,z) but values are minecraft pallete entry indices
-       while self.avatar_uuid is None:
-          eventlet.greenthread.sleep(self.tick_delay) # don't return until we're spawned but still run tick handler in a speedy manner
+       self.vox_updates      = []
+       self.sock.blocking_handlers = False
+       yatelog.info('minecraft','Awaiting download of avatar position and terrain data')
+       while self.av_pos is None:
+          eventlet.greenthread.sleep(self.tick_delay)
+          self.minecraft_client_tick()
+       yatelog.info('minecraft','Got avatar position, awaiting chunks')
+       while not self.chunk_data.has_key(self.get_av_chunk()):
           self.tick()
+          yatelog.debug('minecraft','Waiting for chunk %s' % str(self.get_av_chunk()) )
+          yatelog.debug('minecraft','Current avatar position: %s, Currently loaded chunks: %s' % (str(self.av_pos),str(self.chunk_data.keys())) )
+       yatelog.info('minecraft','Got terrain data, ready to rock')
+   def get_chunk_fromxz(self,x,z):
+       """ Util function to get what chunk an (x,z) coordinate is in, minecraft format - returns (x,z)
+       """
+       chunk_x = int(round(x)%16)
+       chunk_z = int(round(z)%16)
+       if self.av_pos[0] < 0: chunk_x = -chunk_x
+       if self.av_pos[2] < 0: chunk_z = -chunk_z
+       return (chunk_x,chunk_z)
+   def get_av_chunk(self):
+       return self.get_chunk_fromxz(self.av_pos[0],self.av_pos[2])
+   def get_voxel(self,spatial_pos):
+       yatelog.debug('minecraft','Querying block at %s' % str(spatial_pos))
+
+       if not self.env.has_key((spatial_pos[0],spatial_pos[1],spatial_pos[2])): # if we don't have it, first try to get it from a chunk
+          chunk_x,chunk_z = self.get_chunk_fromxz(spatial_pos[0],spatial_pos[2])
+          yatelog.debug('minecraft','Do not have block %s, checking loaded chunks' % str(spatial_pos))
+          if self.chunk_data.has_key((chunk_x,chunk_z)):
+             yatelog.debug('minecraft','Found chunk (%s,%s) for %s' % (chunk_x,chunk_z,str(spatial_pos)))
+             self.process_chunk_data(chunk_x,chunk_z,self.chunk_data[(chunk_x,chunk_z)])
+          else:
+             yatelog.warn('minecraft','Queried block not in a currently loaded chunk at %s' % str(spatial_pos))
+       # now we try and get it again
+
+       if self.env.has_key((spatial_pos[0],spatial_pos[1],spatial_pos[2])):
+          blockid = self.env[(spatial_pos[0],spatial_pos[1],spatial_pos[2])]
+          if blockid >0:
+             yate_type = YATE_VOXEL_TOTAL_OBSTACLE # temporary hack for now
+          else:
+             yate_type = YATE_VOXEL_EMPTY
+       else:
+          yate_type = YATE_VOXEL_UNKNOWN
+       if yate_type != YATE_VOXEL_UNKNOWN:
+          blockdata = burger_data.blockid_blocks[blockid]
+          yatelog.debug('minecraft','Block at %s: %s' % (str(spatial_pos),blockdata))
+          vox = base.YateBaseVoxel(spatial_pos=tuple(spatial_pos),basic_type=yate_type,specific_type=blockid)
+       else:
+          yatelog.debug('minecraft','Unknown block at %s' % (str(spatial_pos)))
+          vox = base.YateBaseVoxel(spatial_pos=tuple(spatial_pos),basic_type=YATE_VOXEL_UNKNOWN)
+       return vox
    def get_vision_range(self):
        """ Minecraft chunk sections are 16*16*16 - this would probably be the ideal if it could fit into a single bulk voxel update
            Sadly it can't, so we return half of that on the (X,Y) plane and a quarter on the Z axis or 8*8*4
@@ -55,6 +107,12 @@ class MinecraftDriver(base.YateBaseDriver):
        """
        chunk_x        = buff.unpack_int()
        chunk_z        = buff.unpack_int()
+       self.chunk_data[(chunk_x,chunk_z)] = buff
+       self.chunk_data[(chunk_x,chunk_z)].save()
+   def process_chunk_data(self,chunk_x,chunk_z,buff):
+       """ Used for lazy evaluation
+       """
+       buff.restore()
        yatelog.debug('minecraft','Chunk update at (%s,%s)' % (chunk_x,chunk_z))
        continuous     = buff.unpack('?')
        primary_bitmap = buff.unpack_varint()
@@ -96,7 +154,7 @@ class MinecraftDriver(base.YateBaseDriver):
                      if block > pal_length:
                         yatelog.warn('minecraft','Got a block outside of the chunk pallette, block ID is %s, pal length is %s' % (block,pal_length))
                      else:
-                        block = pal_data[block]
+                        block = pal_data[block-1]
                   chunk_blocks.append(block)
               lightcrap = buff.read(2048) # we just don't care about the lighting at all but still gotta read it
               if self.dimension==MC_OVERWORLD: lightcrap = buff.read(2048)
@@ -106,9 +164,9 @@ class MinecraftDriver(base.YateBaseDriver):
                       for block_y in xrange(16):
                           eventlet.greenthread.sleep(0)
                           if block_offset < 256:
-                             total_block_x = block_x + chunk_x
+                             total_block_x = block_x + (chunk_x*16)
                              total_block_y = block_y + (chunk_y*16)
-                             total_block_z = block_z + chunk_z
+                             total_block_z = block_z + (chunk_z*16)
                              sane_x = total_block_x
                              sane_y = total_block_z
                              sane_z = total_block_y
@@ -117,6 +175,8 @@ class MinecraftDriver(base.YateBaseDriver):
    def handle_join_game(self,buff):
        self.avatar_eid = buff.unpack_int()
        yatelog.info('minecraft','We are entity ID %s' % self.avatar_eid)
+       self.sock.send_plugin_message(buffer.Buffer.pack_string('MC|Brand'),
+                                     buffer.Buffer.pack_string('YATE minecraft driver'))
    def handle_player_position_and_look(self,buff):
        """ When this packet comes in, it lets us know where we are
        """
@@ -133,7 +193,7 @@ class MinecraftDriver(base.YateBaseDriver):
           self.av_pitch  = pos_look[4]
        else:
           flags = buff.unpack('B') # handle relative vs absolute in 1.8.x+
-          for i in xrange(0,2):
+          for i in xrange(0,3):
               if flags & (1 << i):
                  self.av_pos[i] += pos_look[i]
               else:
@@ -170,6 +230,8 @@ class MinecraftDriver(base.YateBaseDriver):
    def full_update(self):
        """ This is called every second (20 ticks)
        """
+       # if we're using blocking handlers, return immediately
+       if self.sock.blocking_handlers: return
        # get the sane (x,y,z) position using get_pos() so it can handle blocking as required and then convert to minecraft
        sane_pos = self.get_pos()
        insane_x = sane_pos[0]
@@ -200,5 +262,11 @@ class MinecraftDriver(base.YateBaseDriver):
        self.avatar_name = buff.unpack_string()
        self.sock.switch_mode("play")
        yatelog.info('minecraft','Connected to minecraft server %s:%s with display name "%s" and avatar UUID %s' % (self.server_addr[0],self.server_addr[1],self.avatar_name,self.avatar_uuid))
+       self.sock.send_client_settings(buffer.Buffer.pack_string('en_GB'), # locale
+                                      buffer.Buffer.pack_byte(1),         # view distance
+                                      buffer.Buffer.pack_varint(0),       # chat is enabled
+                                      buffer.Buffer.pack('?',False),      # disable chat colors
+                                      buffer.Buffer.pack_byte(0xFF),      # enable all the displayed skin parts
+                                      buffer.Buffer.pack_varint(1))       # right handed, not sure if this matters
 
 driver = MinecraftDriver

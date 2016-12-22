@@ -35,9 +35,8 @@ class MCSendMethod:
        else:
           protomode = kwargs['protomode']
        if not self.idents.has_key(protomode):
-          yatelog.warn('MCSock','No ident for packet in current protocol mode')
+          yatelog.warn('MCSock','No ident for packet %s in current protocol mode %s' % (self.name,protocol_modes[protomode]))
           return
-       yatelog.debug('MCSock','Found valid ident for %s packet in protocol mode %s' % (self.name,protocol_modes[protomode]))
        data = b""
        for arg in args:
            data += arg
@@ -62,13 +61,14 @@ class MCSocket:
        self.compression_enabled   = False
 
        self.handlers = {'login_set_compression':self.handle_login_set_compression,
-                        'handle_keep_alive':    self.handle_keep_alive,
+                        'keep_alive':           self.handle_keep_alive,
                         'set_compression':      self.handle_set_compression}
        self.handlers.update(handlers)
        self.cipher   = crypto.Cipher()
        self.pool     = eventlet.GreenPool(1000)
        
-       self.ready     = False
+       self.ready             = False
+       self.blocking_handlers = False # if set to True, packet handlers will be invoked by the reader thread
 
        for k,v in packets.packet_idents.items():
            if k[0]==self.protocol_version:
@@ -128,7 +128,6 @@ class MCSocket:
           eventlet.greenthread.sleep(0)
           try:
              self.tcp_sock.sendall(outdata)
-             yatelog.debug('MCSock','Transmitted a packet')
           except:
              yatelog.fatal_exception('MCSock','Could not transmit to the server')
 
@@ -179,7 +178,10 @@ class MCSocket:
           if packets.packet_names.has_key(k):
              if self.handlers.has_key(packets.packet_names[k]):
                 try:
-                   self.pool.spawn_n(self.handler_wrapper,packets.packet_names[k],self.handlers[packets.packet_names[k]],pack_buff)
+                   if self.blocking_handlers:
+                     self.handlers[packets.packet_names[k]](pack_buff)
+                   else:
+                     self.pool.spawn_n(self.handler_wrapper,packets.packet_names[k],self.handlers[packets.packet_names[k]],pack_buff)
                 except:
                    yatelog.minor_exception('MCSock','Error scheduling packet handler')
              else:
