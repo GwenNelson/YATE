@@ -57,10 +57,8 @@ class MinecraftDriver(base.YateBaseDriver):
    def get_chunk_fromxz(self,x,z):
        """ Util function to get what chunk an (x,z) coordinate is in, minecraft format - returns (x,z)
        """
-       chunk_x = int(round(x)%16)
-       chunk_z = int(round(z)%16)
-       if self.av_pos[0] < 0: chunk_x = -chunk_x
-       if self.av_pos[2] < 0: chunk_z = -chunk_z
+       chunk_x = int(float(x) / 16.0)
+       chunk_z = int(float(z) / 16.0)
        return (chunk_x,chunk_z)
    def get_av_chunk(self):
        return self.get_chunk_fromxz(self.av_pos[0],self.av_pos[2])
@@ -68,11 +66,12 @@ class MinecraftDriver(base.YateBaseDriver):
        yatelog.debug('minecraft','Querying block at %s' % str(spatial_pos))
 
        if not self.env.has_key((spatial_pos[0],spatial_pos[1],spatial_pos[2])): # if we don't have it, first try to get it from a chunk
-          chunk_x,chunk_z = self.get_chunk_fromxz(spatial_pos[0],spatial_pos[2])
+          chunk_x,chunk_z = self.get_chunk_fromxz(spatial_pos[0],spatial_pos[1])
           yatelog.debug('minecraft','Do not have block %s, checking loaded chunks' % str(spatial_pos))
           if self.chunk_data.has_key((chunk_x,chunk_z)):
              yatelog.debug('minecraft','Found chunk (%s,%s) for %s' % (chunk_x,chunk_z,str(spatial_pos)))
              self.process_chunk_data(chunk_x,chunk_z,self.chunk_data[(chunk_x,chunk_z)])
+             yatelog.debug('minecraft','Updated chunk (%s,%s)' % (chunk_x,chunk_z))
           else:
              yatelog.warn('minecraft','Queried block not in a currently loaded chunk at %s' % str(spatial_pos))
        # now we try and get it again
@@ -117,7 +116,7 @@ class MinecraftDriver(base.YateBaseDriver):
        continuous     = buff.unpack('?')
        primary_bitmap = buff.unpack_varint()
        data_size      = buff.unpack_varint()
-       for chunk_y in xrange(15):
+       for chunk_y in xrange(16):
            eventlet.greenthread.sleep(0)
            chunk_blocks = []
            bits_per_block = 0
@@ -159,6 +158,7 @@ class MinecraftDriver(base.YateBaseDriver):
               lightcrap = buff.read(2048) # we just don't care about the lighting at all but still gotta read it
               if self.dimension==MC_OVERWORLD: lightcrap = buff.read(2048)
               block_offset = 0
+              yatelog.debug('minecraft',str(len(chunk_blocks)))
               for block_x in xrange(16):
                   for block_z in xrange(16):
                       for block_y in xrange(16):
@@ -171,6 +171,7 @@ class MinecraftDriver(base.YateBaseDriver):
                              sane_y = total_block_z
                              sane_z = total_block_y
                              self.env[(sane_x,sane_y,sane_z)] = chunk_blocks[block_offset]
+                             yatelog.debug('minecraft','Updated (%s,%s,%s) in chunk (%s,%s)' % (sane_x,sane_y,sane_z,chunk_x,chunk_z))
                              block_offset += 1
    def handle_join_game(self,buff):
        self.avatar_eid = buff.unpack_int()
