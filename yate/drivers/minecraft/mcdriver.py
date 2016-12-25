@@ -9,6 +9,7 @@ from yateproto import *
 from mcproto import mcsock
 from mcproto import buffer
 
+from mcproto import smpmap
 import burger_data
 
 MC_OVERWORLD = 1
@@ -39,20 +40,16 @@ class MinecraftDriver(base.YateBaseDriver):
        self.av_pitch         = None
        self.av_yaw           = None
        self.on_ground        = True
-       self.dimension        = MC_OVERWORLD
-       self.chunk_data       = {} # maps (x,z) (minecraft format) to chunk data for lazy evaluation
-       self.env              = {} # voxels galore, in sane format for coordinates (x,y,z) but values are minecraft pallete entry indices
-       self.vox_updates      = []
+       self.world            = smpmap.Dimension(smpmap.DIMENSION_OVERWORLD)
        self.sock.blocking_handlers = False
        yatelog.info('minecraft','Awaiting download of avatar position and terrain data')
        while self.av_pos is None:
           eventlet.greenthread.sleep(self.tick_delay)
           self.minecraft_client_tick()
        yatelog.info('minecraft','Got avatar position, awaiting chunks')
-       while not self.chunk_data.has_key(self.get_av_chunk()):
+       while self.world.get_block(self.av_pos[0],self.av_pos[2],self.av_pos[1]) is None:
           self.tick()
           yatelog.debug('minecraft','Waiting for chunk %s' % str(self.get_av_chunk()) )
-          yatelog.debug('minecraft','Current avatar position: %s, Currently loaded chunks: %s' % (str(self.av_pos),str(self.chunk_data.keys())) )
        yatelog.info('minecraft','Got terrain data, ready to rock')
    def get_chunk_fromxz(self,x,z):
        """ Util function to get what chunk an (x,z) coordinate is in, minecraft format - returns (x,z)
@@ -64,26 +61,20 @@ class MinecraftDriver(base.YateBaseDriver):
        return self.get_chunk_fromxz(self.av_pos[0],self.av_pos[2])
    def get_voxel(self,spatial_pos):
        yatelog.debug('minecraft','Querying block at %s' % str(spatial_pos))
-
-       if not self.env.has_key((spatial_pos[0],spatial_pos[1],spatial_pos[2])): # if we don't have it, first try to get it from a chunk
-          chunk_x,chunk_z = self.get_chunk_fromxz(spatial_pos[0],spatial_pos[1])
-          yatelog.debug('minecraft','Do not have block %s, checking loaded chunks' % str(spatial_pos))
-          if self.chunk_data.has_key((chunk_x,chunk_z)):
-             yatelog.debug('minecraft','Found chunk (%s,%s) for %s' % (chunk_x,chunk_z,str(spatial_pos)))
-             self.process_chunk_data(chunk_x,chunk_z,self.chunk_data[(chunk_x,chunk_z)])
-             yatelog.debug('minecraft','Updated chunk (%s,%s)' % (chunk_x,chunk_z))
-          else:
-             yatelog.warn('minecraft','Queried block not in a currently loaded chunk at %s' % str(spatial_pos))
-       # now we try and get it again
-
-       if self.env.has_key((spatial_pos[0],spatial_pos[1],spatial_pos[2])):
-          blockid = self.env[(spatial_pos[0],spatial_pos[1],spatial_pos[2])]
+       insane_x = spatial_pos[0]
+       insane_y = spatial_pos[2]
+       insane_z = spatial_pos[1]
+       block = self.world.get_block(insane_x,insane_y,insane_z)
+       if block is None:
+          yate_type = YATE_VOXEL_UNKNOWN
+       else:
+          blockid = block[0]
           if blockid >0:
-             yate_type = YATE_VOXEL_TOTAL_OBSTACLE # temporary hack for now
+             yate_type = YATE_VOXEL_TOTAL_OBSTACLE
           else:
              yate_type = YATE_VOXEL_EMPTY
-       else:
-          yate_type = YATE_VOXEL_UNKNOWN
+       # now we try and get it again
+
        if yate_type != YATE_VOXEL_UNKNOWN:
           blockdata = burger_data.blockid_blocks[blockid]
           yatelog.debug('minecraft','Block at %s: %s' % (str(spatial_pos),blockdata))
@@ -104,75 +95,14 @@ class MinecraftDriver(base.YateBaseDriver):
    def handle_chunk_data(self,buff):
        """ We get some voxel data here, yay!
        """
-       chunk_x        = buff.unpack_int()
-       chunk_z        = buff.unpack_int()
-       self.chunk_data[(chunk_x,chunk_z)] = buff
-       self.chunk_data[(chunk_x,chunk_z)].save()
-   def process_chunk_data(self,chunk_x,chunk_z,buff):
-       """ Used for lazy evaluation
-       """
-       buff.restore()
-       yatelog.debug('minecraft','Chunk update at (%s,%s)' % (chunk_x,chunk_z))
-       continuous     = buff.unpack('?')
-       primary_bitmap = buff.unpack_varint()
-       data_size      = buff.unpack_varint()
-       for chunk_y in xrange(16):
-           eventlet.greenthread.sleep(0)
-           chunk_blocks = []
-           bits_per_block = 0
-           pal_length     = 0
-           pal_data       = []
-           if primary_bitmap & (1 << chunk_y):
-              bits_per_block = buff.unpack('B')
-
-              if bits_per_block < 4: bits_per_block = 4
-              if bits_per_block > 8: bits_per_block = 13
-              pal_length     = buff.unpack_varint() # pallette length
-              pal_data       = []
-              if pal_length > 0:
-                 for i in xrange(pal_length):
-                     eventlet.greenthread.sleep(0)
-                     pal_data.append(buff.unpack_varint())
-              data_array_len = buff.unpack_varint()
-              data_array = []
-              for i in xrange(data_array_len):
-                  eventlet.greenthread.sleep(0)
-                  data_array.append(buff.unpack_long())
-              max_val = (1 << bits_per_block) - 1
-              for i in xrange(data_array_len):
-                  eventlet.greenthread.sleep(0)
-                  start_long   = (i * bits_per_block)
-                  start_offset = (i * bits_per_block) % 64
-                  end_long     = ((i + 1) * bits_per_block - 1)
-                  if start_long == end_long:
-                     block = (data_array[start_long/64] >> start_offset) & max_val
-                  else:
-                     end_offset = 64 - start_offset
-                     block = (data_array[start_long/64] >> start_offset | data_array[end_long/64] << end_offset) & max_val
-                  if pal_length >0:
-                     if block > pal_length:
-                        yatelog.warn('minecraft','Got a block outside of the chunk pallette, block ID is %s, pal length is %s' % (block,pal_length))
-                     else:
-                        block = pal_data[block-1]
-                  chunk_blocks.append(block)
-              lightcrap = buff.read(2048) # we just don't care about the lighting at all but still gotta read it
-              if self.dimension==MC_OVERWORLD: lightcrap = buff.read(2048)
-              block_offset = 0
-              yatelog.debug('minecraft',str(len(chunk_blocks)))
-              for block_x in xrange(16):
-                  for block_z in xrange(16):
-                      for block_y in xrange(16):
-                          eventlet.greenthread.sleep(0)
-                          if block_offset < 256:
-                             total_block_x = block_x + (chunk_x*16)
-                             total_block_y = block_y + (chunk_y*16)
-                             total_block_z = block_z + (chunk_z*16)
-                             sane_x = total_block_x
-                             sane_y = total_block_z
-                             sane_z = total_block_y
-                             self.env[(sane_x,sane_y,sane_z)] = chunk_blocks[block_offset]
-                             yatelog.debug('minecraft','Updated (%s,%s,%s) in chunk (%s,%s)' % (sane_x,sane_y,sane_z,chunk_x,chunk_z))
-                             block_offset += 1
+       data = {}
+       data['chunk_x']        = buff.unpack_int()
+       data['chunk_z']        = buff.unpack_int()
+       data['continuous']     = buff.unpack('?')
+       data['primary_bitmap'] = buff.unpack_varint()
+       data['data_size']      = buff.unpack_varint()
+       data['data']           = buff.read()
+       self.world.unpack_column(data)
    def handle_join_game(self,buff):
        self.avatar_eid = buff.unpack_int()
        yatelog.info('minecraft','We are entity ID %s' % self.avatar_eid)
