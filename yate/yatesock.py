@@ -1,4 +1,5 @@
 import eventlet
+import zlib
 eventlet.monkey_patch()
 
 import gc
@@ -97,6 +98,7 @@ class YATESocket:
              msg_id     = msg_tuple[1]
              to_addr    = msg_tuple[2]
              msgdata    = msgpack.packb((msg_type,msg_params,msg_id))
+             msgdata    = zlib.compress(msgdata)
              if to_addr==None:
                 yatelog.debug('YATESock','Broadcasting message %s to all peers: %s' % (msg_type,msg_params))
                 peer_list = self.known_peers.copy()
@@ -224,6 +226,7 @@ class YATESocket:
             except:
                yatelog.minor_exception('YATESock','Failed during parse receive')
          if data != None:
+            data = zlib.decompress(data)
             gc.disable() # performance hack for msgpack
             try:
                msg        = msgpack.unpackb(data,use_list = False)
