@@ -101,6 +101,7 @@ class YATEConsoleApp:
    def voxel_update_cb(self,voxel):
        """ If a voxel is updated within the visual range and on the same level as the avatar, update the display
        """
+       return
        vox_pos           = voxel.get_pos()
 
        avatar_pos        = self.av_pos
@@ -115,11 +116,11 @@ class YATEConsoleApp:
           vox_char = voxel_chars[voxel.get_basic_type()]
        self.voxel_win.addstr(vox_y+4,vox_x+4,vox_char,curses.color_pair(VOXEL_COLOR_PAIR+voxel.get_basic_type()))
    def avatar_pos_cb(self,spatial_position):
-       av_x = spatial_position[0]
-       av_y = spatial_position[1]
-       av_z = spatial_position[2]
-       self.voxel_win.addstr(av_y+4,av_x+4,'A')
-       self.av_pos = spatial_position
+       av_x = int(spatial_position[0])
+       av_y = int(spatial_position[1])
+       av_z = int(spatial_position[2])
+       self.voxel_win.addstr((av_y % (self.h-4))+4,(av_x % (self.w-4))+4,'A')
+       self.av_pos = (av_x,av_y,av_z)
        
    def init_voxel_display(self):
        self.voxel_win   = curses.newwin(self.h-4,self.w-2,self.y+3,self.x+2)

@@ -48,7 +48,7 @@ class MinecraftDriver(base.YateBaseDriver):
           self.minecraft_client_tick()
        yatelog.info('minecraft','Got avatar position, awaiting chunks')
        while self.world.get_block(self.av_pos[0],self.av_pos[2],self.av_pos[1]) is None:
-          self.tick()
+          self.minecraft_client_tick()
           yatelog.debug('minecraft','Waiting for chunk %s' % str(self.get_av_chunk()) )
        yatelog.info('minecraft','Got terrain data, ready to rock')
    def get_chunk_fromxz(self,x,z):
