@@ -40,6 +40,10 @@ class YateBaseVoxel:
        """ return the basic type of the voxel as an integer
        """
        return self.basic_type       
+   def get_specific_type(self):
+       """ Return the specific type of the voxel as an integer
+       """
+       self.specific_type
    def get_pos(self):
        """ return a tuple representing the 3D spatial coordinates of this voxel
        """

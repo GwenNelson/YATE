@@ -4,6 +4,7 @@ import curses
 import curses.panel
 import time
 
+from yate import utils
 from yate import yatelog
 
 from yate import yateclient
@@ -101,25 +102,46 @@ class YATEConsoleApp:
    def voxel_update_cb(self,voxel):
        """ If a voxel is updated within the visual range and on the same level as the avatar, update the display
        """
-       return
        vox_pos           = voxel.get_pos()
 
        avatar_pos        = self.av_pos
        av_x,av_y,av_z    = avatar_pos
        vox_x,vox_y,vox_z = vox_pos
+       if vox_z != av_z: return
 
-       if round(vox_z) != round(av_z): return
+       max_x = self.w - 4
+       max_y = self.h - 4
+       vox_x = (int(vox_x))
+       vox_y = (int(vox_y))
+
 
        if vox_pos == avatar_pos:
           vox_char = 'A'
        else:
           vox_char = voxel_chars[voxel.get_basic_type()]
-       self.voxel_win.addstr(vox_y+4,vox_x+4,vox_char,curses.color_pair(VOXEL_COLOR_PAIR+voxel.get_basic_type()))
+
+       if vox_x < av_x:
+          voxchar_x = ((self.w-4) / 2) - utils.diff(vox_x,av_x)
+       else:
+          voxchar_x = ((self.w-4) / 2) + utils.diff(vox_x,av_x)
+
+       if vox_y < av_y:
+          voxchar_y = ((self.h-4) / 2) - utils.diff(vox_y,av_y)
+       else:
+          voxchar_y = ((self.h-4) / 2) + utils.diff(vox_y,av_y)
+
+       if voxel.get_specific_type() > 0: vox_char = str(voxel.get_specific_type())
+
+       if voxchar_x >= max_x: return
+       if voxchar_y >= max_y: return
+
+       self.voxel_win.addstr(voxchar_y,voxchar_x,vox_char,curses.color_pair(VOXEL_COLOR_PAIR+voxel.get_basic_type()))
    def avatar_pos_cb(self,spatial_position):
        av_x = int(spatial_position[0])
        av_y = int(spatial_position[1])
        av_z = int(spatial_position[2])
-       self.voxel_win.addstr((av_y % (self.h-4))+4,(av_x % (self.w-4))+4,'A')
+
+       self.voxel_win.addstr((self.h-4) / 2, (self.w-4)/2,'A')
        self.av_pos = (av_x,av_y,av_z)
        
    def init_voxel_display(self):

@@ -67,21 +67,16 @@ class MinecraftDriver(base.YateBaseDriver):
        block = self.world.get_block(insane_x,insane_y,insane_z)
        if block is None:
           yate_type = YATE_VOXEL_UNKNOWN
-       else:
-          blockid = block[0]
-          if blockid >0:
-             yate_type = YATE_VOXEL_TOTAL_OBSTACLE
-          else:
-             yate_type = YATE_VOXEL_EMPTY
-       # now we try and get it again
-
-       if yate_type != YATE_VOXEL_UNKNOWN:
-          blockdata = burger_data.blockid_blocks[blockid]
-          yatelog.debug('minecraft','Block at %s: %s' % (str(spatial_pos),blockdata))
-          vox = base.YateBaseVoxel(spatial_pos=tuple(spatial_pos),basic_type=yate_type,specific_type=blockid)
-       else:
-          yatelog.debug('minecraft','Unknown block at %s' % (str(spatial_pos)))
+          yatelog.warn('minecraft','Requested unknown block at %s' % (str(spatial_pos)))
           vox = base.YateBaseVoxel(spatial_pos=tuple(spatial_pos),basic_type=YATE_VOXEL_UNKNOWN)
+          return vox 
+       yatelog.debug('minecraft','Block is %s' % str(block))
+       blockid = block[0]
+       blockdata = burger_data.blockid_blocks[blockid]
+       yatelog.debug('minecraft','Block at %s: %s' % (str(spatial_pos),blockdata))
+       if blockdata['hardness'] == 0: yate_type=YATE_VOXEL_EMPTY
+       if blockdata['hardness'] >  0: yate_type=YATE_VOXEL_TOTAL_OBSTACLE
+       vox = base.YateBaseVoxel(spatial_pos=tuple(spatial_pos),basic_type=yate_type,specific_type=blockid)
        return vox
    def get_vision_range(self):
        """ Minecraft chunk sections are 16*16*16 - this would probably be the ideal if it could fit into a single bulk voxel update

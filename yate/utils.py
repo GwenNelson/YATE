@@ -36,6 +36,13 @@ def iter_within(start,end):
             for z in xrange(start[2],end[2],1):
                 yield (x,y,z)
 
+def diff(a,b):
+    """ Returns the difference between 2 scalars
+    """
+    if a>b: return a-b
+    if a<b: return b-a
+    return 0
+
 def check_within(pos,start,end):
     """ Checks if pos is within the 3D area specified by start and end
         All parameters are tuples specifying coordinates in 3D space
